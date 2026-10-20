@@ -1,0 +1,52 @@
+name: sync
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/sync.yml
+  schedule:
+    - cron: "0 */3 * * *"
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    name: Save clan snapshot
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Validate required secrets
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          SITE_URL: ${{ secrets.SITE_URL }}
+        run: |
+          if [[ -z "$CRON_SECRET" ]]; then
+            echo "::error::Repository secret CRON_SECRET is missing."
+            exit 1
+          fi
+          if [[ -z "$SITE_URL" ]]; then
+            echo "::error::Repository secret SITE_URL is missing."
+            exit 1
+          fi
+          case "$SITE_URL" in
+            https://*|http://*) ;;
+            *)
+              echo "::error::SITE_URL must be a full URL starting with https:// or http://."
+              exit 1
+              ;;
+          esac
+
+      - name: Request snapshot
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          SITE_URL: ${{ secrets.SITE_URL }}
+        run: |
+          curl --fail-with-body --silent --show-error --max-time 60 \
+            --request POST \
+            --header "Authorization: Bearer ${CRON_SECRET}" \
+            --header "Accept: application/json" \
+            "${SITE_URL%/}/api/sync"
