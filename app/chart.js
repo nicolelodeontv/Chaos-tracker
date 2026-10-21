@@ -1,32 +1,35 @@
-const COLORS = ['#5b9cff', '#f0b429', '#e5534b', '#57ab5a'];
+const COLORS = ['#c9a24b', '#8fa3c9', '#6fa37a', '#c4604f'];
 const fmt = (n) => Math.round(n).toLocaleString('en-US');
 
 export default function Chart({ series }) {
   const all = series.flatMap((s) => s.points);
   if (new Set(all.map((p) => p.t)).size < 2) {
-    return <p style={{ color: '#789' }}>The chart appears after two syncs in the same season.</p>;
+    return <p className="empty">The chart appears after two syncs in the same season.</p>;
   }
-  const W = 900, H = 260, L = 70, B = 24;
+  const W = 760, H = 280, L = 64, R = 130, B = 26, T = 12;
   const ts = all.map((p) => p.t), vs = all.map((p) => p.v);
   const t0 = Math.min(...ts), t1 = Math.max(...ts), v0 = Math.min(...vs), v1 = Math.max(...vs);
-  const x = (t) => L + ((t - t0) / (t1 - t0 || 1)) * (W - L - 10);
-  const y = (v) => H - B - ((v - v0) / (v1 - v0 || 1)) * (H - B - 10);
+  const x = (t) => L + ((t - t0) / (t1 - t0 || 1)) * (W - L - R);
+  const y = (v) => H - B - ((v - v0) / (v1 - v0 || 1)) * (H - B - T);
   const day = (t) => new Date(t).toISOString().slice(5, 16).replace('T', ' ');
+  const labels = series
+    .map((s, i) => ({ name: s.name, color: COLORS[i % 4], y: s.points.length ? y(s.points[s.points.length - 1].v) : 0, x: s.points.length ? x(s.points[s.points.length - 1].t) : 0 }))
+    .sort((a, b) => a.y - b.y);
+  labels.forEach((l, i) => { if (i && l.y < labels[i - 1].y + 14) l.y = labels[i - 1].y + 14; });
+  const f = { fontFamily: 'var(--font-sans), sans-serif', fontSize: 11, fill: '#6b7a99' };
   return (
-    <div>
-      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%' }}>
-        <text x={4} y={y(v1) + 4} fill="#789" fontSize="11">{fmt(v1)}</text>
-        <text x={4} y={y(v0) + 4} fill="#789" fontSize="11">{fmt(v0)}</text>
-        <text x={L} y={H - 6} fill="#789" fontSize="11">{day(t0)}</text>
-        <text x={W - 10} y={H - 6} fill="#789" fontSize="11" textAnchor="end">{day(t1)}</text>
-        {series.map((s, i) => (
-          <polyline key={s.name} fill="none" stroke={COLORS[i % 4]} strokeWidth="2"
-            points={s.points.map((p) => `${x(p.t)},${y(p.v)}`).join(' ')} />
-        ))}
-      </svg>
-      <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-        {series.map((s, i) => <span key={s.name}><span style={{ color: COLORS[i % 4] }}>●</span> {s.name}</span>)}
-      </div>
-    </div>
+    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%' }} role="img" aria-label="Reputation over time">
+      <text x={4} y={y(v1) + 4} {...f}>{fmt(v1)}</text>
+      <text x={4} y={y(v0) + 4} {...f}>{fmt(v0)}</text>
+      <text x={L} y={H - 6} {...f}>{day(t0)}</text>
+      <text x={W - R} y={H - 6} textAnchor="end" {...f}>{day(t1)}</text>
+      {series.map((s, i) => (
+        <polyline key={s.name} fill="none" stroke={COLORS[i % 4]} strokeWidth={i === 0 ? 3 : 2}
+          points={s.points.map((p) => `${x(p.t)},${y(p.v)}`).join(' ')} />
+      ))}
+      {labels.map((l) => (
+        <text key={l.name} x={l.x + 8} y={l.y + 4} {...f} fill={l.color} style={{ fontWeight: 600 }}>{l.name}</text>
+      ))}
+    </svg>
   );
 }
