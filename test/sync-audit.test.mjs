@@ -107,8 +107,8 @@ test('dedupe fingerprint ignores rotating CSRF and form tokens but preserves the
     shouldStoreRawPayload(hashPayloadForDedupe(first), hashPayloadForDedupe(second)),
     false,
   );
-  assert.match(normalizePayloadForDedupe(first), /content="[[]CSRF_TOKEN[]]"/);
-  assert.match(normalizePayloadForDedupe(first), /value="[[]FORM_TOKEN[]]"/);
+  assert.ok(normalizePayloadForDedupe(first).includes('content="[CSRF_TOKEN]"'));
+  assert.ok(normalizePayloadForDedupe(first).includes('value="[FORM_TOKEN]"'));
 });
 
 test('dedupe fingerprint still changes for meaningful page content and unrelated fields', () => {
