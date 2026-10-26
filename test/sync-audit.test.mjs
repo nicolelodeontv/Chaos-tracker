@@ -60,12 +60,14 @@ test('does not warn on equal or increased reputation or when the clan is new', (
 test('keeps all decreases for audit but alerts only at or above the threshold', () => {
   const warnings = [
     { clan: 'Small', decrease: 9999 },
+    { clan: 'Threshold', decrease: 10000 },
     { clan: 'The Order', decrease: 40531 },
     { clan: 'Large', decrease: 115897 },
   ];
 
   assert.equal(LARGE_DECREASE_ALERT_THRESHOLD, 10000);
   assert.deepEqual(getLargeDecreaseAlerts(warnings), [
+    { clan: 'Threshold', decrease: 10000 },
     { clan: 'The Order', decrease: 40531 },
     { clan: 'Large', decrease: 115897 },
   ]);
