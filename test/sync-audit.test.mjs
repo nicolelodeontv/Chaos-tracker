@@ -6,6 +6,7 @@ import {
   hashPayload,
   LARGE_DECREASE_ALERT_THRESHOLD,
   shouldAlertOnConsecutiveAuditDegradation,
+  shouldStoreRawPayload,
 } from '../lib/sync-audit.mjs';
 
 test('hashPayload returns a stable SHA-256 hash', () => {
@@ -79,4 +80,13 @@ test('alerts only on two consecutive degraded audit statuses', () => {
   assert.equal(shouldAlertOnConsecutiveAuditDegradation('partial', 'ok'), false);
   assert.equal(shouldAlertOnConsecutiveAuditDegradation('unavailable', 'unknown'), false);
   assert.equal(shouldAlertOnConsecutiveAuditDegradation('ok', 'unavailable'), false);
+});
+
+test('stores raw payload only when the hash changes or prior hash is unreadable', () => {
+  const hash = 'same-payload-hash';
+  assert.equal(shouldStoreRawPayload(hash, hash, true), false);
+  assert.equal(shouldStoreRawPayload('previous-hash', 'new-hash', true), true);
+  assert.equal(shouldStoreRawPayload(null, 'new-hash', true), true);
+  assert.equal(shouldStoreRawPayload(null, 'new-hash', false), true);
+  assert.equal(shouldStoreRawPayload('unverified-hash', 'new-hash', false), true);
 });

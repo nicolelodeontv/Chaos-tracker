@@ -7,6 +7,7 @@ import {
   hashPayload,
   LARGE_DECREASE_ALERT_THRESHOLD,
   shouldAlertOnConsecutiveAuditDegradation,
+  shouldStoreRawPayload,
 } from '../../../lib/sync-audit.mjs';
 
 export const dynamic = 'force-dynamic';
@@ -131,7 +132,7 @@ async function run(req) {
     parsed = parse(html);
     const { clans, wars, closed } = parsed;
     const total = clans.reduce((sum, clan) => sum + clan.reputation, 0);
-    const rawPayloadStored = !previousHashRead || previousHash !== payloadSha256;
+    const rawPayloadStored = shouldStoreRawPayload(previousHash, payloadSha256, previousHashRead);
 
     // Always retain the exact hash and parsed rows. Store HTML only when it differs
     // from the preceding source payload (or when the comparison could not be made).
