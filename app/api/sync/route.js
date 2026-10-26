@@ -6,6 +6,7 @@ import {
   getLargeDecreaseAlerts,
   hashPayload,
   LARGE_DECREASE_ALERT_THRESHOLD,
+  shouldAlertOnConsecutiveAuditDegradation,
 } from '../../../lib/sync-audit.mjs';
 
 export const dynamic = 'force-dynamic';
@@ -88,7 +89,7 @@ async function run(req) {
         .single();
       if (error) throw error;
       auditId = data.id;
-      auditStatus = 'available';
+      auditStatus = 'ok';
     } catch (error) {
       auditStatus = 'unavailable';
       console.warn('Sync audit insert failed; snapshot sync will continue:', errorText(error));
@@ -107,7 +108,10 @@ async function run(req) {
         .not('raw_payload', 'is', null);
       if (error) throw error;
     } catch (error) {
-      console.warn('Raw-payload retention cleanup failed; continuing sync:', errorText(error));
+      auditUpdateFailed = true;
+      const warning = { type: 'raw-payload-retention-cleanup-failed', error: errorText(error) };
+      console.warn('Raw-payload retention cleanup failed; continuing sync:', warning.error);
+      await updateAudit({ status: 'warning', anomalies: [warning] });
     }
   };
 
@@ -151,7 +155,7 @@ async function run(req) {
     // Season detection is unchanged: the aggregate reputation reset starts the next season.
     const { data: last, error: lastError } = await db
       .from('sync_runs')
-      .select('season,total_rep')
+      .select('season,total_rep,audit_status')
       .order('captured_at', { ascending: false })
       .limit(1)
       .maybeSingle();
@@ -213,9 +217,6 @@ async function run(req) {
     const { error: e2 } = await db.from('clan_snapshots').insert(snaps);
     if (e2) throw e2;
 
-    const { error: e4 } = await db.from('sync_runs').insert({ season, total_rep: total });
-    if (e4) throw e4;
-
     if (wars.length) {
       const { error: e3 } = await db.from('war_results').upsert(wars, { onConflict: 'season,rank' });
       if (e3) throw e3;
@@ -232,11 +233,30 @@ async function run(req) {
       error: null,
     });
 
+    const currentAuditStatus = auditId ? (auditUpdateFailed ? 'partial' : auditStatus) : 'unavailable';
+    const auditAlert = shouldAlertOnConsecutiveAuditDegradation(currentAuditStatus, last?.audit_status);
+    const { error: e4 } = await db.from('sync_runs').insert({
+      season,
+      total_rep: total,
+      audit_status: currentAuditStatus,
+    });
+    if (e4) throw e4;
+
+    if (auditAlert) {
+      console.error('Audit storage has degraded for at least two consecutive syncs:', {
+        previous: last?.audit_status,
+        current: currentAuditStatus,
+      });
+    } else if (currentAuditStatus !== 'ok') {
+      console.warn('Sync succeeded with degraded audit status:', currentAuditStatus);
+    }
+
     return NextResponse.json({
       season,
       clans: snaps.length,
       war_rows: wars.length,
-      audit_status: auditId ? (auditUpdateFailed ? 'partial' : auditStatus) : 'unavailable',
+      audit_status: currentAuditStatus,
+      audit_alert: auditAlert,
       guard_status: guardStatus,
       decreases_detected: decreases.length,
       large_decrease_alerts: alerts,
