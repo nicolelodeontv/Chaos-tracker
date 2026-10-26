@@ -40,13 +40,24 @@ jobs:
               ;;
           esac
 
-      - name: Request snapshot
+      - name: Request snapshot and check audit health
         env:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
           SITE_URL: ${{ secrets.SITE_URL }}
         run: |
-          curl --fail-with-body --silent --show-error --max-time 60 \
+          response="$(curl --fail-with-body --silent --show-error --max-time 60 \
             --request POST \
             --header "Authorization: Bearer ${CRON_SECRET}" \
             --header "Accept: application/json" \
-            "${SITE_URL%/}/api/sync"
+            "${SITE_URL%/}/api/sync")"
+          printf '%s\n' "$response"
+
+          audit_status="$(jq -r '.audit_status // "unknown"' <<< "$response")"
+          if [[ "$audit_status" != "ok" ]]; then
+            echo "::warning::Snapshot sync completed with audit_status=$audit_status."
+          fi
+
+          if jq -e '.audit_alert == true' >/dev/null <<< "$response"; then
+            echo "::error::Snapshot sync completed, but audit storage has degraded for at least two consecutive runs."
+            exit 1
+          fi
