@@ -13,7 +13,7 @@ export const dynamic = 'force-dynamic';
 const RAW_PAYLOAD_RETENTION_DAYS = 30;
 
 async function run(req) {
-  if (req.headers.get('authorization') !== \`Bearer \${process.env.CRON_SECRET}\`) {
+  if (req.headers.get('authorization') !== 'Bearer ' + process.env.CRON_SECRET) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
 
@@ -188,7 +188,7 @@ async function run(req) {
     });
 
     if (decreases.length) {
-      console.info(\`Detected \${decreases.length} within-season reputation decrease(s); only decreases >= \${LARGE_DECREASE_ALERT_THRESHOLD} are elevated to alerts.\`);
+      console.info('Detected ' + decreases.length + ' within-season reputation decrease(s); only decreases >= ' + LARGE_DECREASE_ALERT_THRESHOLD + ' are elevated to alerts.');
     }
     if (alerts.length) {
       console.warn('Large within-season reputation decreases:', JSON.stringify(alerts));
