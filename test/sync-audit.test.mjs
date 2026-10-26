@@ -4,6 +4,8 @@ import {
   findWithinSeasonReputationDecreases,
   getLargeDecreaseAlerts,
   hashPayload,
+  hashPayloadForDedupe,
+  normalizePayloadForDedupe,
   LARGE_DECREASE_ALERT_THRESHOLD,
   shouldAlertOnConsecutiveAuditDegradation,
   shouldStoreRawPayload,
@@ -89,4 +91,33 @@ test('stores raw payload only when the hash changes or prior hash is unreadable'
   assert.equal(shouldStoreRawPayload(null, 'new-hash', true), true);
   assert.equal(shouldStoreRawPayload(null, 'new-hash', false), true);
   assert.equal(shouldStoreRawPayload('unverified-hash', 'new-hash', false), true);
+});
+
+test('dedupe fingerprint ignores rotating CSRF and form tokens but preserves the raw hash', () => {
+  const first = '<html><head><meta name="csrf-token" content="csrf-A"></head>'
+    + '<body><form><input type="hidden" name="_token" value="form-A" autocomplete="off"></form>'
+    + '<div class="rep">100</div></body></html>';
+  const second = '<html><head><meta name="csrf-token" content="csrf-B"></head>'
+    + '<body><form><input type="hidden" name="_token" value="form-B" autocomplete="off"></form>'
+    + '<div class="rep">100</div></body></html>';
+
+  assert.notEqual(hashPayload(first), hashPayload(second));
+  assert.equal(hashPayloadForDedupe(first), hashPayloadForDedupe(second));
+  assert.equal(
+    shouldStoreRawPayload(hashPayloadForDedupe(first), hashPayloadForDedupe(second)),
+    false,
+  );
+  assert.match(normalizePayloadForDedupe(first), /content="[[]CSRF_TOKEN[]]"/);
+  assert.match(normalizePayloadForDedupe(first), /value="[[]FORM_TOKEN[]]"/);
+});
+
+test('dedupe fingerprint still changes for meaningful page content and unrelated fields', () => {
+  const first = '<meta name="csrf-token" content="csrf-A">'
+    + '<input type="hidden" name="_token" value="form-A" autocomplete="off">'
+    + '<div class="rep">100</div><span>Updated 10:00</span>';
+  const changedReputation = first.replace('>100<', '>101<');
+  const changedTimestamp = first.replace('Updated 10:00', 'Updated 10:01');
+
+  assert.notEqual(hashPayloadForDedupe(first), hashPayloadForDedupe(changedReputation));
+  assert.notEqual(hashPayloadForDedupe(first), hashPayloadForDedupe(changedTimestamp));
 });
