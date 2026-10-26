@@ -17,47 +17,108 @@ async function run(req) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
 
-  // Vercel Preview currently shares some environment variables with Production.
-  // Never allow a preview deployment to write tracker snapshots by default.
+  // Preview shares database variables with Production today. Never permit a
+  // preview deployment to write snapshots unless explicitly enabled for testing.
   if (process.env.VERCEL_ENV === 'preview' && process.env.ALLOW_PREVIEW_SYNC !== 'true') {
     return NextResponse.json({ error: 'sync disabled outside production' }, { status: 403 });
   }
 
   const db = adminClient();
   const sourceUrl = getSourceUrl();
+  let auditId = null;
+  let auditStatus = 'unavailable';
+  let auditUpdateFailed = false;
+  let previousHash = null;
+  let previousHashRead = false;
   let html = null;
   let payloadSha256 = null;
   let parsed = { clans: [], wars: [], closed: false };
-  let auditId = null;
-  let auditStatus = 'unavailable';
 
   const errorText = (error) => String(error?.message || error).slice(0, 4000);
 
-  // Audit persistence is deliberately best-effort. It must never stop the real sync.
+  // Audit writes are best-effort by design; they must never abort snapshot capture.
   const updateAudit = async (values) => {
     if (!auditId) return false;
     try {
       const { error } = await db.from('sync_audits').update(values).eq('id', auditId);
       if (error) {
+        auditUpdateFailed = true;
         console.warn('Sync audit update failed; continuing without audit update:', error.message);
         return false;
       }
       return true;
     } catch (error) {
+      auditUpdateFailed = true;
       console.warn('Sync audit update failed; continuing without audit update:', errorText(error));
       return false;
     }
   };
 
+  const prepareAudit = async () => {
+    // Read the last non-null hash before creating this run's in-progress row.
+    try {
+      const { data, error } = await db
+        .from('sync_audits')
+        .select('payload_sha256')
+        .not('payload_sha256', 'is', null)
+        .order('captured_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (error) throw error;
+      previousHash = data?.payload_sha256 ?? null;
+      previousHashRead = true;
+    } catch (error) {
+      // On read failure retain the HTML for evidence rather than risk skipping it.
+      console.warn('Previous audit hash unavailable; current raw payload will be retained:', errorText(error));
+    }
+
+    try {
+      const { data, error } = await db
+        .from('sync_audits')
+        .insert({
+          source_url: sourceUrl,
+          status: 'started',
+          raw_payload_stored: false,
+          parsed_clans: [],
+          parsed_wars: [],
+          anomalies: [],
+        })
+        .select('id')
+        .single();
+      if (error) throw error;
+      auditId = data.id;
+      auditStatus = 'available';
+    } catch (error) {
+      auditStatus = 'unavailable';
+      console.warn('Sync audit insert failed; snapshot sync will continue:', errorText(error));
+    }
+  };
+
+  const cleanupExpiredRawPayloads = async () => {
+    // The GitHub sync workflow runs every 3 hours, so this retention sweep runs
+    // on that cadence. It's best-effort; no independent cron service is needed.
+    try {
+      const cutoff = new Date(Date.now() - RAW_PAYLOAD_RETENTION_DAYS * 24 * 60 * 60 * 1000).toISOString();
+      const { error } = await db
+        .from('sync_audits')
+        .update({ raw_payload: null })
+        .lt('captured_at', cutoff)
+        .not('raw_payload', 'is', null);
+      if (error) throw error;
+    } catch (error) {
+      console.warn('Raw-payload retention cleanup failed; continuing sync:', errorText(error));
+    }
+  };
+
   const recordFailure = async (error) => {
     const message = errorText(error);
-    if (auditId) {
-      await updateAudit({ status: 'failed', error: message });
-    }
-    // If the audit table is unavailable, log the problem but do not replace the
-    // original sync result with a secondary audit error.
+    await updateAudit({ status: 'failed', error: message });
+    // If auditing is unavailable, retain the original sync error and outcome.
     console.error('Clan sync failed:', message);
   };
+
+  await prepareAudit();
+  await cleanupExpiredRawPayloads();
 
   try {
     html = await fetchHtml();
@@ -65,75 +126,28 @@ async function run(req) {
     parsed = parse(html);
     const { clans, wars, closed } = parsed;
     const total = clans.reduce((sum, clan) => sum + clan.reputation, 0);
+    const rawPayloadStored = !previousHashRead || previousHash !== payloadSha256;
 
-    // Store raw HTML only when the exact payload hash changes. Every run still
-    // stores the hash and parsed rows so the history remains comparable.
-    let previousHash = null;
-    try {
-      const { data: previousAudit, error: previousAuditError } = await db
-        .from('sync_audits')
-        .select('payload_sha256')
-        .order('captured_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      if (previousAuditError) throw previousAuditError;
-      previousHash = previousAudit?.payload_sha256 ?? null;
-    } catch (error) {
-      // If audit reads are unavailable, retain the payload instead of risking
-      // losing the only copy of a new source response.
-      console.warn('Previous sync-audit hash unavailable; retaining current raw payload:', errorText(error));
-    }
-
-    const rawPayloadStored = previousHash !== payloadSha256;
-    try {
-      const { data: audit, error: auditInsertError } = await db
-        .from('sync_audits')
-        .insert({
-          source_url: sourceUrl,
-          payload_sha256: payloadSha256,
-          raw_payload: rawPayloadStored ? html : null,
-          raw_payload_stored: rawPayloadStored,
-          parsed_clans: clans,
-          parsed_wars: wars,
-          anomalies: [],
-          total_rep: total,
-          clan_count: clans.length,
-          war_count: wars.length,
-          status: 'started',
-        })
-        .select('id')
-        .single();
-
-      if (auditInsertError) throw auditInsertError;
-      auditId = audit.id;
-      auditStatus = 'available';
-    } catch (error) {
-      auditStatus = 'unavailable';
-      console.warn('Sync audit insert failed; snapshot sync will continue:', errorText(error));
-    }
-
-    // The repository's scheduled sync workflow calls this route every three
-    // hours, so retention runs on that cadence without a separate cron job.
-    // Retention is also best-effort and never affects the snapshot sync.
-    try {
-      const rawPayloadCutoff = new Date(Date.now() - RAW_PAYLOAD_RETENTION_DAYS * 24 * 60 * 60 * 1000).toISOString();
-      const { error: retentionError } = await db
-        .from('sync_audits')
-        .update({ raw_payload: null })
-        .lt('captured_at', rawPayloadCutoff)
-        .not('raw_payload', 'is', null);
-      if (retentionError) throw retentionError;
-    } catch (error) {
-      console.warn('Raw-payload retention cleanup failed; continuing sync:', errorText(error));
-    }
+    // Always retain the exact hash and parsed rows. Store HTML only when it differs
+    // from the preceding source payload (or when the comparison could not be made).
+    await updateAudit({
+      payload_sha256: payloadSha256,
+      raw_payload: rawPayloadStored ? html : null,
+      raw_payload_stored: rawPayloadStored,
+      parsed_clans: clans,
+      parsed_wars: wars,
+      total_rep: total,
+      clan_count: clans.length,
+      war_count: wars.length,
+    });
 
     if (!clans.length) {
       const message = 'No clan table found. The page may load data via JS; point SOURCE_URL at the data endpoint.';
       await updateAudit({ status: 'failed', error: message });
-      return NextResponse.json({ error: message }, { status: 502 });
+      return NextResponse.json({ error: message, audit_status: auditStatus }, { status: 502 });
     }
 
-    // Season: first run is seeded from the war results; later runs bump it when total rep resets.
+    // Season detection is unchanged: the aggregate reputation reset starts the next season.
     const { data: last, error: lastError } = await db
       .from('sync_runs')
       .select('season,total_rep')
@@ -146,9 +160,9 @@ async function run(req) {
     let season = last ? last.season : closed ? maxWar : maxWar + 1;
     if (last && total < Number(last.total_rep) * 0.5) season = last.season + 1;
 
-    // A guard-query failure is an audit gap, not a reason to skip a healthy sync.
     let decreases = [];
     let guardStatus = 'available';
+    let guardError = null;
     try {
       const { data: previousRows, error: previousError } = await db
         .from('clan_latest')
@@ -157,14 +171,20 @@ async function run(req) {
       decreases = findWithinSeasonReputationDecreases(clans, previousRows || [], season);
     } catch (error) {
       guardStatus = 'unavailable';
-      console.warn('Within-season decrease guard unavailable; continuing sync:', errorText(error));
+      guardError = errorText(error);
+      console.warn('Within-season decrease guard unavailable; continuing sync:', guardError);
     }
 
     const alerts = getLargeDecreaseAlerts(decreases);
+    const auditAnomalies = [
+      ...decreases,
+      ...(guardError ? [{ type: 'reputation-decrease-guard-unavailable', error: guardError }] : []),
+    ];
+
     await updateAudit({
       season,
       total_rep: total,
-      anomalies: decreases,
+      anomalies: auditAnomalies,
     });
 
     if (decreases.length) {
@@ -207,7 +227,7 @@ async function run(req) {
       total_rep: total,
       clan_count: snaps.length,
       war_count: wars.length,
-      anomalies: decreases,
+      anomalies: auditAnomalies,
       error: null,
     });
 
@@ -215,14 +235,14 @@ async function run(req) {
       season,
       clans: snaps.length,
       war_rows: wars.length,
-      audit_status: auditStatus,
+      audit_status: auditId ? (auditUpdateFailed ? 'partial' : auditStatus) : 'unavailable',
       guard_status: guardStatus,
       decreases_detected: decreases.length,
       large_decrease_alerts: alerts,
     });
   } catch (error) {
     await recordFailure(error);
-    return NextResponse.json({ error: String(error.message || error) }, { status: 500 });
+    return NextResponse.json({ error: String(error.message || error), audit_status: auditId ? 'partial' : 'unavailable' }, { status: 500 });
   }
 }
 
