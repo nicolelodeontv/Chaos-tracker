@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { findWithinSeasonReputationDecreases, hashPayload } from '../lib/sync-audit.mjs';
+import {
+  findWithinSeasonReputationDecreases,
+  getLargeDecreaseAlerts,
+  hashPayload,
+  LARGE_DECREASE_ALERT_THRESHOLD,
+} from '../lib/sync-audit.mjs';
 
 test('hashPayload returns a stable SHA-256 hash', () => {
   assert.equal(
@@ -49,4 +54,18 @@ test('does not warn on equal or increased reputation or when the clan is new', (
   );
 
   assert.deepEqual(warnings, []);
+});
+
+test('keeps all decreases for audit but alerts only at or above the threshold', () => {
+  const warnings = [
+    { clan: 'Small', decrease: 9999 },
+    { clan: 'The Order', decrease: 40531 },
+    { clan: 'Large', decrease: 115897 },
+  ];
+
+  assert.equal(LARGE_DECREASE_ALERT_THRESHOLD, 10000);
+  assert.deepEqual(getLargeDecreaseAlerts(warnings), [
+    { clan: 'The Order', decrease: 40531 },
+    { clan: 'Large', decrease: 115897 },
+  ]);
 });
