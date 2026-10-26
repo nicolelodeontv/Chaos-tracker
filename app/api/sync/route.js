@@ -13,14 +13,15 @@ export const dynamic = 'force-dynamic';
 const RAW_PAYLOAD_RETENTION_DAYS = 30;
 
 async function run(req) {
-  if (req.headers.get('authorization') !== 'Bearer ' + process.env.CRON_SECRET) {
-    return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
-  }
-
-  // Preview shares database variables with Production today. Never permit a
-  // preview deployment to write snapshots unless explicitly enabled for testing.
+  // Preview shares public database variables with Production today. Block it
+  // before checking credentials or constructing a privileged database client.
   if (process.env.VERCEL_ENV === 'preview' && process.env.ALLOW_PREVIEW_SYNC !== 'true') {
     return NextResponse.json({ error: 'sync disabled outside production' }, { status: 403 });
+  }
+
+  const cronSecret = process.env.CRON_SECRET;
+  if (!cronSecret || req.headers.get('authorization') !== 'Bearer ' + cronSecret) {
+    return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
 
   const db = adminClient();
