@@ -5,6 +5,7 @@ import {
   getLargeDecreaseAlerts,
   hashPayload,
   LARGE_DECREASE_ALERT_THRESHOLD,
+  shouldAlertOnConsecutiveAuditDegradation,
 } from '../lib/sync-audit.mjs';
 
 test('hashPayload returns a stable SHA-256 hash', () => {
@@ -68,4 +69,12 @@ test('keeps all decreases for audit but alerts only at or above the threshold', 
     { clan: 'The Order', decrease: 40531 },
     { clan: 'Large', decrease: 115897 },
   ]);
+});
+
+test('alerts only on two consecutive degraded audit statuses', () => {
+  assert.equal(shouldAlertOnConsecutiveAuditDegradation('partial', 'unavailable'), true);
+  assert.equal(shouldAlertOnConsecutiveAuditDegradation('unavailable', 'partial'), true);
+  assert.equal(shouldAlertOnConsecutiveAuditDegradation('partial', 'ok'), false);
+  assert.equal(shouldAlertOnConsecutiveAuditDegradation('unavailable', 'unknown'), false);
+  assert.equal(shouldAlertOnConsecutiveAuditDegradation('ok', 'unavailable'), false);
 });
