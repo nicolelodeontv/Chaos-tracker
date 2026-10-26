@@ -1,5 +1,6 @@
 import { publicClient } from '../lib/supabase';
 import Chart from './chart';
+import { isSyncStale } from '../lib/syncFreshness.js';
 
 export const revalidate = 300;
 const fmt = (n) => (n ?? 0).toLocaleString('en-US');
@@ -44,6 +45,9 @@ export default async function Page() {
   const small = clans.filter((c) => c.reputation > 0 && c.reputation < max * 0.1);
   const idle = clans.filter((c) => c.reputation <= 0);
   const seasons = [...new Set(wars.map((w) => w.season))];
+  const lastSyncMs = clans[0]?.captured_at ? new Date(clans[0].captured_at).getTime() : null;
+  const hasValidLastSync = Number.isFinite(lastSyncMs);
+  const syncIsStale = isSyncStale(lastSyncMs);
 
   const top = [...new Set([mine, ...clans.slice(0, 3).map((c) => c.name)])].slice(0, 4);
   let hist = [];
@@ -83,7 +87,14 @@ export default async function Page() {
                 {below && <p className="gap">{fmt(me.reputation - below.reputation)} ahead of {below.name}.</p>}
               </>
             )}
-            <p className="meta">Season {season ?? '–'}, last synced {clans[0] ? new Date(clans[0].captured_at).toUTCString() : 'never'}</p>
+            <p className={`meta${syncIsStale ? ' stale' : ''}`}>
+              Season {season ?? '–'}, last synced {hasValidLastSync ? new Date(lastSyncMs).toUTCString() : 'never'}
+              {syncIsStale && (
+                <span className="sync-warning" role="status">
+                  {hasValidLastSync ? ' · Sync overdue: data may be stale (over 6 hours since last sync).' : ' · No sync recorded; data may be stale.'}
+                </span>
+              )}
+            </p>
           </div>
         </section>
 

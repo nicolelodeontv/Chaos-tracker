@@ -8,6 +8,8 @@ main { max-width: 760px; margin: 0 auto; padding: 0 16px 56px; }
 h1, h2, .name, summary { font-family: var(--font-serif), serif; font-weight: 700; }
 h2 { font-size: 1.35rem; margin: 44px 0 12px; padding-bottom: 6px; border-bottom: 1px solid var(--ink-2); }
 .meta { color: var(--slate); margin: 0; }
+.meta.stale { color: var(--brick); }
+.sync-warning { color: var(--brick); font-weight: 700; }
 .status { position: sticky; top: 0; z-index: 5; background: var(--ink); border-bottom: 2px solid var(--gold); padding: calc(10px + env(safe-area-inset-top, 0px)) 16px 10px; }
 .status-in { max-width: 760px; margin: 0 auto; display: flex; flex-wrap: wrap; gap: 2px 18px; align-items: baseline; font-size: .9rem; }
 .status .big { font-family: var(--font-serif), serif; font-weight: 700; font-size: 1.15rem; color: var(--gold); }
