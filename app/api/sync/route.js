@@ -5,6 +5,7 @@ import {
   findWithinSeasonReputationDecreases,
   getLargeDecreaseAlerts,
   hashPayload,
+  hashPayloadForDedupe,
   LARGE_DECREASE_ALERT_THRESHOLD,
   shouldAlertOnConsecutiveAuditDegradation,
   shouldStoreRawPayload,
@@ -31,8 +32,8 @@ async function run(req) {
   let auditId = null;
   let auditStatus = 'unavailable';
   let auditUpdateFailed = false;
-  let previousHash = null;
-  let previousHashRead = false;
+  let previousDedupeHash = null;
+  let previousDedupeHashRead = false;
   let html = null;
   let payloadSha256 = null;
   let parsed = { clans: [], wars: [], closed: false };
@@ -58,21 +59,21 @@ async function run(req) {
   };
 
   const prepareAudit = async () => {
-    // Read the last non-null hash before creating this run's in-progress row.
+    // Read the last non-null normalized-content hash before this run's row.
     try {
       const { data, error } = await db
         .from('sync_audits')
-        .select('payload_sha256')
-        .not('payload_sha256', 'is', null)
+        .select('dedupe_sha256')
+        .not('dedupe_sha256', 'is', null)
         .order('captured_at', { ascending: false })
         .limit(1)
         .maybeSingle();
       if (error) throw error;
-      previousHash = data?.payload_sha256 ?? null;
-      previousHashRead = true;
+      previousDedupeHash = data?.dedupe_sha256 ?? null;
+      previousDedupeHashRead = true;
     } catch (error) {
-      // On read failure retain the HTML for evidence rather than risk skipping it.
-      console.warn('Previous audit hash unavailable; current raw payload will be retained:', errorText(error));
+      // On read failure retain HTML rather than risk skipping evidence.
+      console.warn('Previous normalized audit hash unavailable; current raw payload will be retained:', errorText(error));
     }
 
     try {
@@ -129,15 +130,21 @@ async function run(req) {
   try {
     html = await fetchHtml();
     payloadSha256 = hashPayload(html);
+    const dedupeSha256 = hashPayloadForDedupe(html);
     parsed = parse(html);
     const { clans, wars, closed } = parsed;
     const total = clans.reduce((sum, clan) => sum + clan.reputation, 0);
-    const rawPayloadStored = shouldStoreRawPayload(previousHash, payloadSha256, previousHashRead);
+    const rawPayloadStored = shouldStoreRawPayload(
+      previousDedupeHash,
+      dedupeSha256,
+      previousDedupeHashRead,
+    );
 
-    // Always retain the exact hash and parsed rows. Store HTML only when it differs
-    // from the preceding source payload (or when the comparison could not be made).
+    // Keep the exact raw HTML hash on every row. For the storage decision only,
+    // ignore the two rotating tokens and compare the remaining page HTML.
     await updateAudit({
       payload_sha256: payloadSha256,
+      dedupe_sha256: dedupeSha256,
       raw_payload: rawPayloadStored ? html : null,
       raw_payload_stored: rawPayloadStored,
       parsed_clans: clans,
