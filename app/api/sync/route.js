@@ -1,4 +1,6 @@
+import { randomUUID } from 'node:crypto';
 import { NextResponse } from 'next/server';
+import { matchesBearerToken } from '../../../lib/bearer-auth.mjs';
 import { adminClient } from '../../../lib/supabase';
 import { fetchHtml, getSourceUrl, parse } from '../../../lib/source';
 import {
@@ -23,12 +25,54 @@ async function run(req) {
   }
 
   const cronSecret = process.env.CRON_SECRET;
-  if (!cronSecret || req.headers.get('authorization') !== 'Bearer ' + cronSecret) {
+  if (!matchesBearerToken(req.headers.get('authorization'), cronSecret)) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
 
   const db = adminClient();
   const sourceUrl = getSourceUrl();
+  const claimToken = randomUUID();
+  const { data: claim, error: claimError } = await db.rpc('claim_tracker_sync', {
+    p_token: claimToken,
+  });
+
+  if (claimError || !claim || typeof claim.claimed !== 'boolean') {
+    console.error('Could not claim sync lock:', claimError?.message || 'invalid claim response');
+    return NextResponse.json({ error: 'sync lock unavailable' }, { status: 503 });
+  }
+
+  if (!claim.claimed) {
+    const recentAuditStatus = claim.reason === 'recent-success'
+      ? claim.last_audit_status
+      : 'ok';
+    return NextResponse.json({
+      skipped: true,
+      reason: claim.reason || 'sync-already-running',
+      last_success_at: claim.last_success_at || null,
+      audit_status: recentAuditStatus || 'ok',
+      audit_alert: false,
+    });
+  }
+
+  let claimHeld = true;
+  const releaseSyncClaim = async (success) => {
+    if (!claimHeld) return true;
+    try {
+      const { data, error } = await db.rpc('release_tracker_sync', {
+        p_token: claimToken,
+        p_success: success,
+      });
+      if (error || data !== true) {
+        console.error('Could not release sync lock:', error?.message || 'claim token not found');
+        return false;
+      }
+      claimHeld = false;
+      return true;
+    } catch (error) {
+      console.error('Could not release sync lock:', error?.message || String(error));
+      return false;
+    }
+  };
   let auditId = null;
   let auditStatus = 'unavailable';
   let auditUpdateFailed = false;
@@ -99,8 +143,8 @@ async function run(req) {
   };
 
   const cleanupExpiredRawPayloads = async () => {
-    // The GitHub sync workflow runs every 3 hours, so this retention sweep runs
-    // on that cadence. It's best-effort; no independent cron service is needed.
+    // This endpoint is invoked by both Supabase Cron and the GitHub backup.
+    // The sweep is best-effort and runs whenever an actual sync is performed.
     try {
       const cutoff = new Date(Date.now() - RAW_PAYLOAD_RETENTION_DAYS * 24 * 60 * 60 * 1000).toISOString();
       const { error } = await db
@@ -157,6 +201,7 @@ async function run(req) {
     if (!clans.length) {
       const message = 'No clan table found. The page may load data via JS; point SOURCE_URL at the data endpoint.';
       await updateAudit({ status: 'failed', error: message });
+      await releaseSyncClaim(false);
       return NextResponse.json({ error: message, audit_status: auditStatus }, { status: 502 });
     }
 
@@ -259,6 +304,7 @@ async function run(req) {
       console.warn('Sync succeeded with degraded audit status:', currentAuditStatus);
     }
 
+    await releaseSyncClaim(true);
     return NextResponse.json({
       season,
       clans: snaps.length,
@@ -271,6 +317,7 @@ async function run(req) {
     });
   } catch (error) {
     await recordFailure(error);
+    await releaseSyncClaim(false);
     return NextResponse.json({ error: String(error.message || error), audit_status: auditId ? 'partial' : 'unavailable' }, { status: 500 });
   }
 }
