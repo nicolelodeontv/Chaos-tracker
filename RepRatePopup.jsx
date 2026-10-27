@@ -30,9 +30,11 @@ export default function RepRatePopup({ clanName, rates }) {
       const margin = 16;
       const left = Math.max(margin, Math.min(trigger.left, window.innerWidth - panel.width - margin));
       const below = trigger.bottom + 6;
-      const top = below + panel.height <= window.innerHeight - margin
-        ? below
-        : Math.max(margin, trigger.top - panel.height - 6);
+      const above = trigger.top - panel.height - 6;
+      const maxTop = Math.max(margin, window.innerHeight - panel.height - margin);
+      const preferredTop = below + panel.height <= window.innerHeight - margin ? below : above;
+      // Clamp even when resizing leaves the trigger itself partly outside the viewport.
+      const top = Math.max(margin, Math.min(preferredTop, maxTop));
 
       setPosition((previous) => (
         previous.ready && Math.abs(previous.left - left) < 1 && Math.abs(previous.top - top) < 1
