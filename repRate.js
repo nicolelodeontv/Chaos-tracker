@@ -11,7 +11,9 @@ export function rateBetween(from, to) {
   const seconds = toSeconds(to.captured_at) - toSeconds(from.captured_at);
   if (!(seconds > 0)) return { status: 'no_elapsed' };
 
-  const delta = to.reputation - from.reputation;
+  const delta = Number(to.reputation) - Number(from.reputation);
+  if (!Number.isFinite(delta)) return { status: 'no_data' };
+
   const perSecond = delta / seconds;
   return {
     status: delta < 0 ? 'decrease' : 'ok', // decreases are real in this data; flag, don't hide
@@ -22,21 +24,37 @@ export function rateBetween(from, to) {
   };
 }
 
-// Rate across the most recent sync interval.
-export function lastIntervalRate(snapshots) {
+// Use the newest sample and the nearest preceding sample at least minIntervalSeconds older.
+// This avoids overreacting to duplicate/manual/push-triggered syncs seconds apart.
+export function lastIntervalRate(snapshots, minIntervalSeconds = 300) {
   const s = sortAsc(snapshots);
   if (s.length < 2) return { status: 'no_data' };
-  return rateBetween(s[s.length - 2], s[s.length - 1]);
+
+  const latest = s[s.length - 1];
+  const latestSeconds = toSeconds(latest.captured_at);
+  const minimum = Number.isFinite(minIntervalSeconds) && minIntervalSeconds >= 0 ? minIntervalSeconds : 300;
+  const start = s.slice(0, -1).reverse().find((snapshot) => (
+    String(snapshot.season) === String(latest.season)
+    && latestSeconds - toSeconds(snapshot.captured_at) >= minimum
+  ));
+
+  if (!start) return { status: 'no_data', reason: 'interval_too_short' };
+  return rateBetween(start, latest);
 }
 
-// Average rate over the last `hours`, using the oldest same-season snapshot inside the window.
+// Average rate over the last `hours` of the newest snapshot's season.
+// The returned seconds field is the actual span used, which can be shorter than the window.
 export function windowRate(snapshots, hours) {
   const s = sortAsc(snapshots);
   if (s.length < 2) return { status: 'no_data' };
   const latest = s[s.length - 1];
-  const cutoff = toSeconds(latest.captured_at) - hours * 3600;
+  const latestSeconds = toSeconds(latest.captured_at);
+  const cutoff = latestSeconds - hours * 3600;
   const start = s.find(
-    (x) => toSeconds(x.captured_at) >= cutoff && String(x.season) === String(latest.season)
+    (snapshot) => (
+      toSeconds(snapshot.captured_at) >= cutoff
+      && String(snapshot.season) === String(latest.season)
+    )
   );
   if (!start || start === latest) return { status: 'no_data' };
   return rateBetween(start, latest);
@@ -47,6 +65,17 @@ export function formatRate(value) {
   const abs = Math.abs(value);
   const digits = abs >= 100 ? 0 : abs >= 1 ? 1 : abs >= 0.01 ? 3 : 4;
   return value.toFixed(digits);
+}
+
+export function formatElapsed(seconds) {
+  if (!Number.isFinite(seconds) || seconds <= 0) return '–';
+  const total = Math.round(seconds);
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const remainder = total % 60;
+  if (hours > 0) return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
+  if (minutes > 0) return remainder > 0 ? `${minutes}m ${remainder}s` : `${minutes}m`;
+  return `${remainder}s`;
 }
 
 function sortAsc(snapshots) {
