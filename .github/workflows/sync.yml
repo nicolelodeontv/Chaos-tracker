@@ -8,7 +8,7 @@ on:
     paths:
       - .github/workflows/sync.yml
   schedule:
-    - cron: "17 */3 * * *"
+    - cron: "47 1-23/3 * * *"
 
 permissions:
   contents: read
@@ -54,7 +54,8 @@ jobs:
 
           audit_status="$(jq -r '.audit_status // "unknown"' <<< "$response")"
           if [[ "$audit_status" != "ok" ]]; then
-            echo "::warning::Snapshot sync completed with audit_status=$audit_status."
+            echo "::error::Snapshot sync completed with audit_status=$audit_status."
+            exit 1
           fi
 
           if jq -e '.audit_alert == true' >/dev/null <<< "$response"; then
