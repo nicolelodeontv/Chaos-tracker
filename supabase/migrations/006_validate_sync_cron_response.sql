@@ -63,10 +63,10 @@ begin
 
     if not exists (
       select 1
-      from public.sync_runs
-      where audit_status = 'ok'
-        and captured_at between last_success_at - interval '2 seconds'
-                            and last_success_at + interval '2 seconds'
+      from public.sync_runs as sr
+      where sr.audit_status = 'ok'
+        and sr.captured_at between last_success_at - interval '2 seconds'
+                               and last_success_at + interval '2 seconds'
     ) then
       raise exception 'Recent-success skip did not match an audit_status=ok sync_runs row at %',
         last_success_at;
