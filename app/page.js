@@ -1,17 +1,33 @@
 import { publicClient } from '../lib/supabase';
+import { lastIntervalRate, windowRate } from '../repRate.js';
 import Chart from './chart';
 import { isSyncStale } from '../lib/syncFreshness.js';
+import RepRatePopup from '../RepRatePopup';
 
 export const revalidate = 300;
 const fmt = (n) => (n ?? 0).toLocaleString('en-US');
 const orDash = (v) => (v && v.replace(/[\s\u3164\u200b-]/g, '') ? v : '–');
 
-function Row({ rank, name, sub, mem, rep, pct, mine, delta, war, top }) {
+const compactRate = (rate) => ({
+  status: rate.status,
+  ...(Number.isFinite(rate.delta) ? { delta: rate.delta } : {}),
+  ...(Number.isFinite(rate.seconds) ? { seconds: rate.seconds } : {}),
+  ...(Number.isFinite(rate.perSecond) ? { perSecond: rate.perSecond } : {}),
+  ...(Number.isFinite(rate.perHour) ? { perHour: rate.perHour } : {}),
+});
+
+function Row({ rank, name, sub, mem, rep, pct, mine, delta, war, top, rates }) {
   return (
     <li className={`row${mine ? ' mine' : ''}${war ? ' war' : ''}${top ? ' top' : ''}`}>
       <span className="bar" style={{ width: `${pct}%` }} />
       <span className="rank">{rank}</span>
-      <span className="who"><span className="name">{name}</span><small>{sub}{mem ? `, ${mem}` : ''}</small></span>
+      <span className="who">
+        <span className="name-line">
+          <span className="name">{name}</span>
+          {!war && Number(rep) > 0 && <RepRatePopup clanName={name} rates={rates} />}
+        </span>
+        <small>{sub}{mem ? `, ${mem}` : ''}</small>
+      </span>
       <span className="rep">{fmt(rep)}</span>
       {!war && <span className="delta">{delta}</span>}
     </li>
@@ -60,9 +76,60 @@ export default async function Page() {
     name,
     points: hist.filter((h) => h.clans.name === name).map((h) => ({ t: new Date(h.captured_at).getTime(), v: Number(h.reputation) })),
   }));
+
+  // Only current-season data from the most recent 24 hours is needed for these summaries.
+  // The unique id tie-breaker makes page boundaries deterministic even when timestamps match.
+  const rateSnapshotsByClan = new Map();
+  let rateQueryFailed = false;
+  if (season != null) {
+    const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const pageSize = 1000;
+    let offset = 0;
+    while (true) {
+      const result = await db.from('clan_snapshots')
+        .select('id,clan_id,captured_at,reputation,season,clans!inner(name)')
+        .eq('season', season)
+        .gte('captured_at', cutoff)
+        .order('captured_at', { ascending: true })
+        .order('id', { ascending: true })
+        .range(offset, offset + pageSize - 1);
+      if (result.error) {
+        console.error('Failed to load snapshot data for reputation rates:', result.error.message);
+        rateQueryFailed = true;
+        break;
+      }
+      const rows = result.data ?? [];
+      for (const snapshot of rows) {
+        if (snapshot.reputation == null || !Number.isFinite(Number(snapshot.reputation))) continue;
+        const name = snapshot.clans?.name;
+        if (!name) continue;
+        if (!rateSnapshotsByClan.has(name)) rateSnapshotsByClan.set(name, []);
+        rateSnapshotsByClan.get(name).push({
+          reputation: Number(snapshot.reputation),
+          season: snapshot.season,
+          captured_at: snapshot.captured_at,
+        });
+      }
+      if (rows.length < pageSize) break;
+      offset += pageSize;
+    }
+  }
+
+  // Calculate rates on the server and send only compact summaries to the client component.
+  const ratesByClan = new Map();
+  if (!rateQueryFailed) {
+    for (const [name, snapshots] of rateSnapshotsByClan) {
+      ratesByClan.set(name, {
+        lastInterval: compactRate(lastIntervalRate(snapshots, 5 * 60)),
+        past24Hours: compactRate(windowRate(snapshots, 24)),
+      });
+    }
+  }
+
   const clanRow = (c) => (
     <Row key={c.name} rank={c.rank} name={c.name} sub={orDash(c.master)} mem={`${c.members}/${c.max_members}`} top={c.rank <= 3}
-      rep={c.reputation} pct={(c.reputation / max) * 100} mine={c.name === mine} delta={<Delta c={c} />} />
+      rep={c.reputation} pct={(c.reputation / max) * 100} mine={c.name === mine} delta={<Delta c={c} />}
+      rates={ratesByClan.get(c.name)} />
   );
 
   return (
