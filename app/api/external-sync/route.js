@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { matchesBearerToken } from '../../../lib/bearer-auth.mjs';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -7,7 +8,7 @@ const SYNC_URL = 'https://trackerforchaos.vercel.app/api/sync';
 
 export async function POST(request) {
   const externalSecret = process.env.EXTERNAL_SYNC_SECRET;
-  if (!externalSecret || request.headers.get('authorization') !== 'Bearer ' + externalSecret) {
+  if (!matchesBearerToken(request.headers.get('authorization'), externalSecret)) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
 
