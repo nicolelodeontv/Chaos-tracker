@@ -4,6 +4,9 @@ on:
   pull_request:
     branches:
       - main
+  push:
+    branches:
+      - feat/forecast-accuracy-tracker
   workflow_dispatch:
 
 permissions:
