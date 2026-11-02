@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process';
 import { setTimeout as delay } from 'node:timers/promises';
+import { fileURLToPath } from 'node:url';
 
 const root = process.cwd();
 const mode = process.env.MOCK_DATA_MODE === 'populated' ? 'populated' : 'empty';
@@ -11,7 +12,7 @@ const env = {
   NEXT_PUBLIC_SUPABASE_ANON_KEY: 'e2e-only-public-anon-key',
   TRACK_CLAN: 'Alpha',
   NEXT_TELEMETRY_DISABLED: '1',
-  NEXT_FONT_GOOGLE_MOCKED_RESPONSES: new URL('./mock-google-fonts.cjs', import.meta.url).pathname,
+  NEXT_FONT_GOOGLE_MOCKED_RESPONSES: fileURLToPath(new URL('./mock-google-fonts.cjs', import.meta.url)),
   PORT: '3000',
 };
 
