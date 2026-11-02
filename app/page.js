@@ -4,6 +4,7 @@ import Chart from './chart';
 import { isSyncStale } from '../lib/syncFreshness.js';
 import RepRatePopup from '../RepRatePopup';
 import ForecastAccuracy from '../ForecastAccuracy';
+import ForecastReliability from '../ForecastReliability';
 
 export const revalidate = 300;
 const fmt = (n) => (n ?? 0).toLocaleString('en-US');
@@ -147,6 +148,33 @@ export default async function Page() {
     }
   }
 
+  let forecastTrend = [];
+  let forecastClanReliability = [];
+  let forecastReliabilityAvailable = true;
+  if (season != null) {
+    const trendCutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const [trendResult, reliabilityResult] = await Promise.all([
+      db.from('clan_forecast_accuracy_trend')
+        .select('scored_day,resolved_count,mean_absolute_error,direction_accuracy_pct')
+        .eq('season', season)
+        .gte('scored_day', trendCutoff)
+        .order('scored_day', { ascending: true }),
+      db.from('clan_forecast_clan_reliability')
+        .select('clan_id,clan_name,resolved_count,pending_count,mean_absolute_error,direction_accuracy_pct,last_resolved_at')
+        .eq('season', season),
+    ]);
+    if (trendResult.error || reliabilityResult.error) {
+      forecastReliabilityAvailable = false;
+      console.error(
+        'Failed to load forecast trend and reliability data:',
+        trendResult.error?.message || reliabilityResult.error?.message,
+      );
+    } else {
+      forecastTrend = trendResult.data ?? [];
+      forecastClanReliability = reliabilityResult.data ?? [];
+    }
+  }
+
   const clanRow = (c) => (
     <Row key={c.name} rank={c.rank} name={c.name} sub={orDash(c.master)} mem={`${c.members}/${c.max_members}`} top={c.rank <= 3}
       rep={c.reputation} pct={(c.reputation / max) * 100} mine={c.name === mine} delta={<Delta c={c} />}
@@ -191,6 +219,13 @@ export default async function Page() {
 
         <h2>24-hour forecast accuracy</h2>
         <ForecastAccuracy metrics={forecastMetrics} forecasts={latestForecasts} available={forecastTrackingAvailable} />
+
+        <h2>Forecast trends &amp; reliability</h2>
+        <ForecastReliability
+          trend={forecastTrend}
+          clans={forecastClanReliability}
+          available={forecastReliabilityAvailable}
+        />
 
         <h2>Ranking</h2>
         <ol className="list">{contenders.map(clanRow)}</ol>
