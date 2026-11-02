@@ -24,7 +24,7 @@ function Row({ rank, name, sub, mem, rep, pct, mine, delta, war, top, rates }) {
       <span className="bar" style={{ width: `${pct}%` }} />
       <span className="rank">{rank}</span>
       <span className="who">
-        <span className="name-line">
+        <div className="name-line">
           <span className="name">{name}</span>
           {!war && Number(rep) > 0 && <RepRatePopup clanName={name} rates={rates} />}
         </span>
