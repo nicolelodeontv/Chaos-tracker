@@ -85,12 +85,12 @@ async function trackForecastAccuracy(db, season, insertedSnapshots) {
     return {
       status: 'ok',
       created: forecasts.length,
-      resolved: Number(resolvedCount) || 0,
+      settled: Number(resolvedCount) || 0,
       without_enough_history: Math.max(0, insertedSnapshots.length - forecasts.length),
     };
   } catch (error) {
     console.warn('Forecast accuracy tracking unavailable; normal clan sync will continue:', String(error?.message || error));
-    return { status: 'unavailable', created: 0, resolved: 0 };
+    return { status: 'unavailable', created: 0, settled: 0 };
   }
 }
 

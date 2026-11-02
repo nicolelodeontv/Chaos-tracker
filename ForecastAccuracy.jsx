@@ -29,7 +29,7 @@ export default function ForecastAccuracy({ metrics, forecasts, available = true 
     <section className="forecast-panel" aria-label="Forecast accuracy tracker">
       <div className="forecast-metrics">
         <div className="forecast-stat">
-          <strong>{meanAbsoluteError == null ? '–' : `${formatRep(meanAbsoluteError)} rep`}</strong>
+          <strong>{meanAbsoluteError == null ? '–' : `${formatMetric(meanAbsoluteError)} rep`}</strong>
           <span>Mean absolute error</span>
         </div>
         <div className="forecast-stat">
@@ -44,7 +44,7 @@ export default function ForecastAccuracy({ metrics, forecasts, available = true 
 
       <p className="forecast-note">
         {resolvedCount > 0
-          ? `Recent season totals include ${formatRep(pendingCount)} pending 24-hour forecast(s). Lower mean error is better.`
+          ? `Season-to-date metrics include ${formatRep(pendingCount)} pending 24-hour forecast(s). Lower mean error is better.`
           : 'Accuracy results will appear after the first 24-hour forecasts reach their target time.'}
         {' '}Predictions use the trailing same-season reputation trend and are estimates, not guaranteed outcomes.
       </p>

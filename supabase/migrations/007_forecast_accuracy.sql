@@ -55,9 +55,10 @@ drop policy if exists "public read" on public.clan_forecasts;
 create policy "public read" on public.clan_forecasts
   for select using (true);
 
-revoke all privileges on table public.clan_forecasts from public;
+revoke all privileges on table public.clan_forecasts from public, anon, authenticated;
 grant select on table public.clan_forecasts to anon, authenticated;
 grant select, insert, update on table public.clan_forecasts to service_role;
+revoke all privileges on sequence public.clan_forecasts_id_seq from public, anon, authenticated;
 grant usage, select on sequence public.clan_forecasts_id_seq to service_role;
 
 -- Resolve against the first same-season snapshot at or after the target timestamp.
