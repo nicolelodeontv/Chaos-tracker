@@ -11,6 +11,7 @@ const env = {
   NEXT_PUBLIC_SUPABASE_ANON_KEY: 'e2e-only-public-anon-key',
   TRACK_CLAN: 'Alpha',
   NEXT_TELEMETRY_DISABLED: '1',
+  NEXT_FONT_GOOGLE_MOCKED_RESPONSES: new URL('./mock-google-fonts.cjs', import.meta.url).pathname,
   PORT: '3000',
 };
 
