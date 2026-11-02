@@ -25,6 +25,7 @@ jobs:
           - populated
     env:
       MOCK_DATA_MODE: ${{ matrix.fixture }}
+      E2E_DEV: '1'
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
