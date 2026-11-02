@@ -72,11 +72,15 @@ try {
   const stub = start(process.execPath, ['tests/e2e/supabase-stub.mjs']);
   await waitForUrl('http://127.0.0.1:54321/health', stub);
 
-  process.stdout.write(`Building the app with ${mode} fixture data and no external database credentials.\n`);
-  await run(npmCommand, ['run', 'build']);
-
-  const next = start(npmCommand, ['run', 'start', '--', '--hostname', '127.0.0.1']);
-  await waitForUrl('http://127.0.0.1:3000', next, 90_000);
+  process.stdout.write(`Starting the app in ${process.env.E2E_DEV === '1' ? 'development' : 'production'} mode with ${mode} fixture data and no external database credentials.\n`);
+  if (process.env.E2E_DEV === '1') {
+    const next = start(npmCommand, ['run', 'dev', '--', '--hostname', '127.0.0.1']);
+    await waitForUrl('http://127.0.0.1:3000', next, 120_000);
+  } else {
+    await run(npmCommand, ['run', 'build']);
+    const next = start(npmCommand, ['run', 'start', '--', '--hostname', '127.0.0.1']);
+    await waitForUrl('http://127.0.0.1:3000', next, 90_000);
+  }
   process.stdout.write('Next.js browser-test server is ready.\n');
 } catch (error) {
   stopChildren();
