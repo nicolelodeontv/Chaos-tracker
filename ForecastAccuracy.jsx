@@ -65,8 +65,6 @@ export default function ForecastAccuracy({ metrics, forecasts, available = true 
             </thead>
             <tbody>
               {rows.map((forecast) => {
-                const change = Number(forecast.forecast_reputation) - Number(forecast.base_reputation);
-                const changeClass = change > 0 ? 'positive' : change < 0 ? 'negative' : '';
                 return (
                   <tr key={forecast.clan_id}>
                     <th scope="row">{forecast.clan_name}</th>
