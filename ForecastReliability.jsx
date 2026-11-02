@@ -33,8 +33,11 @@ function TrendChart({ rows }) {
   const pad = max === min ? Math.max(1, max * 0.08) : (max - min) * 0.12;
   const low = Math.max(0, min - pad);
   const high = max + pad;
+  const dayTimes = rows.map((row) => new Date(`${row.scored_day}T00:00:00.000Z`).getTime());
+  const firstDay = Math.min(...dayTimes);
+  const lastDay = Math.max(...dayTimes);
   const points = rows.map((row, index) => {
-    const x = left + (index / (rows.length - 1)) * (width - left - right);
+    const x = left + ((dayTimes[index] - firstDay) / (lastDay - firstDay || 1)) * (width - left - right);
     const value = Number(row.mean_absolute_error);
     const y = height - bottom - ((value - low) / (high - low || 1)) * (height - top - bottom);
     return { x, y, value, day: row.scored_day };
