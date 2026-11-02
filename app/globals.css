@@ -89,3 +89,18 @@ summary:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
 }
 
 .forecast-table .forecast-error { font-weight: 700; }
+
+/* Forecast trend and reliability */
+.forecast-reliability { margin: 0 0 18px; }
+.forecast-trend-chart { margin: 12px 0; padding: 8px 10px 2px; background: var(--ink-2); border: 1px solid rgba(143,163,201,.22); border-radius: 6px; }
+.forecast-trend-chart svg { display: block; width: 100%; height: auto; }
+.forecast-chart-grid { stroke: rgba(143,163,201,.24); stroke-width: 1; }
+.forecast-chart-label { fill: var(--slate); font: 12px var(--font-sans), system-ui, sans-serif; }
+.forecast-trend-line { stroke: var(--gold); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+.forecast-trend-dot { fill: var(--gold); stroke: var(--ink); stroke-width: 2; }
+.forecast-rank { color: var(--gold); font-variant-numeric: tabular-nums; }
+.forecast-trend-table, .forecast-reliability-table { min-width: 540px; }
+@media (max-width: 560px) {
+  .forecast-trend-chart { padding: 6px 4px 0; }
+  .forecast-chart-label { font-size: 13px; }
+}
