@@ -3,6 +3,7 @@ import { lastIntervalRate, windowRate } from '../repRate.js';
 import Chart from './chart';
 import { isSyncStale } from '../lib/syncFreshness.js';
 import RepRatePopup from '../RepRatePopup';
+import ForecastAccuracy from '../ForecastAccuracy';
 
 export const revalidate = 300;
 const fmt = (n) => (n ?? 0).toLocaleString('en-US');
@@ -126,6 +127,26 @@ export default async function Page() {
     }
   }
 
+  let forecastMetrics = null;
+  let latestForecasts = [];
+  let forecastTrackingAvailable = true;
+  if (season != null) {
+    const [metricResult, forecastResult] = await Promise.all([
+      db.from('clan_forecast_accuracy').select('*').eq('season', season).maybeSingle(),
+      db.from('clan_latest_forecasts').select('*').eq('season', season).order('forecast_reputation', { ascending: false }),
+    ]);
+    if (metricResult.error || forecastResult.error) {
+      forecastTrackingAvailable = false;
+      console.error(
+        'Failed to load forecast tracking data:',
+        metricResult.error?.message || forecastResult.error?.message,
+      );
+    } else {
+      forecastMetrics = metricResult.data ?? null;
+      latestForecasts = forecastResult.data ?? [];
+    }
+  }
+
   const clanRow = (c) => (
     <Row key={c.name} rank={c.rank} name={c.name} sub={orDash(c.master)} mem={`${c.members}/${c.max_members}`} top={c.rank <= 3}
       rep={c.reputation} pct={(c.reputation / max) * 100} mine={c.name === mine} delta={<Delta c={c} />}
@@ -167,6 +188,9 @@ export default async function Page() {
 
         <h2>Reputation over time</h2>
         <Chart series={series} />
+
+        <h2>24-hour forecast accuracy</h2>
+        <ForecastAccuracy metrics={forecastMetrics} forecasts={latestForecasts} available={forecastTrackingAvailable} />
 
         <h2>Ranking</h2>
         <ol className="list">{contenders.map(clanRow)}</ol>
