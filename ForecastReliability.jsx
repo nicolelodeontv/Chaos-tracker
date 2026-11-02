@@ -58,7 +58,7 @@ function TrendChart({ rows }) {
         {points.map((point) => (
           <g key={point.day}>
             <circle cx={point.x} cy={point.y} r="4" className="forecast-trend-dot">
-              <title>{formatDay(point.day)}: {formatNumber(point.value)} rep average error</title>
+              <title>{`${formatDay(point.day)}: ${formatNumber(point.value)} rep average error`}</title>
             </circle>
           </g>
         ))}
