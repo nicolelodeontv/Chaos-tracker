@@ -4,7 +4,10 @@ const mode = process.env.MOCK_DATA_MODE === 'populated' ? 'populated' : 'empty';
 
 async function openHome(page) {
   const pageErrors = [];
-  page.on('pageerror', (error) => pageErrors.push(error.message));
+  page.on('pageerror', (error) => pageErrors.push(`pageerror: ${error.message}`));
+  page.on('console', (message) => {
+    if (message.type() === 'error') pageErrors.push(`console: ${message.text()}`);
+  });
   const response = await page.goto('/', { waitUntil: 'networkidle' });
   expect(response?.status()).toBe(200);
   await expect(page.getByRole('heading', { name: '24-hour forecast accuracy' })).toBeVisible();
