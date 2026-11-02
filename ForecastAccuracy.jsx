@@ -46,7 +46,7 @@ export default function ForecastAccuracy({ metrics, forecasts, available = true 
         {resolvedCount > 0
           ? `Season-to-date metrics include ${formatRep(pendingCount)} pending 24-hour forecast(s). Lower mean error is better.`
           : 'Accuracy results will appear after the first 24-hour forecasts reach their target time.'}
-        {' '}Predictions use the trailing same-season reputation trend and are estimates, not guaranteed outcomes.
+        {' '}Predictions use the trailing same-season reputation trend. Outcomes use the first available same-season snapshot at or after the target, so the observed value may be slightly later than 24 hours.
       </p>
 
       <h3 className="forecast-subtitle">Latest 24-hour projections</h3>
@@ -56,9 +56,10 @@ export default function ForecastAccuracy({ metrics, forecasts, available = true 
             <thead>
               <tr>
                 <th scope="col">Clan</th>
-                <th scope="col">At forecast</th>
+                <th scope="col">Starting rep</th>
                 <th scope="col">24h estimate</th>
-                <th scope="col">Expected change</th>
+                <th scope="col">Actual</th>
+                <th scope="col">Error</th>
                 <th scope="col">History</th>
               </tr>
             </thead>
@@ -71,8 +72,11 @@ export default function ForecastAccuracy({ metrics, forecasts, available = true 
                     <th scope="row">{forecast.clan_name}</th>
                     <td>{formatRep(forecast.base_reputation)}</td>
                     <td>{formatRep(forecast.forecast_reputation)}</td>
-                    <td className={changeClass}>
-                      {change > 0 ? '+' : ''}{formatRep(change)}
+                    <td>{forecast.resolution_status === 'resolved'
+                      ? formatRep(forecast.actual_reputation)
+                      : 'Pending'}</td>
+                    <td className={forecast.absolute_error == null ? '' : 'forecast-error'}>
+                      {forecast.absolute_error == null ? '–' : formatRep(forecast.absolute_error)}
                     </td>
                     <td>{formatMetric(forecast.history_hours, 'h')}</td>
                   </tr>

@@ -75,7 +75,7 @@ summary:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
 .forecast-note { color: var(--slate); font-size: .85rem; margin: 12px 0; }
 .forecast-subtitle { font-family: var(--font-serif), serif; font-size: 1.08rem; margin: 22px 0 8px; }
 .forecast-table-wrap { width: 100%; overflow-x: auto; border: 1px solid var(--ink-2); border-radius: 6px; }
-.forecast-table { width: 100%; min-width: 520px; border-collapse: collapse; font-size: .86rem; font-variant-numeric: tabular-nums; }
+.forecast-table { width: 100%; min-width: 640px; border-collapse: collapse; font-size: .86rem; font-variant-numeric: tabular-nums; }
 .forecast-table th, .forecast-table td { padding: 9px 10px; border-bottom: 1px solid var(--ink-2); text-align: right; white-space: nowrap; }
 .forecast-table thead th { color: var(--slate); font-weight: 600; font-size: .78rem; }
 .forecast-table th:first-child, .forecast-table td:first-child { text-align: left; }
@@ -87,3 +87,5 @@ summary:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
   .forecast-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .forecast-stat:last-child { grid-column: 1 / -1; }
 }
+
+.forecast-table .forecast-error { font-weight: 700; }

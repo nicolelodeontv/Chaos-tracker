@@ -110,12 +110,13 @@ begin
   where f.resolution_status = 'pending'
     and f.target_at <= p_now
     and exists (
+      -- Use the global sync season rather than the per-clan row: a clan can
+      -- disappear from the new ranking while its old forecast is still pending.
       select 1
-      from public.clan_snapshots newer
-      where newer.clan_id = f.clan_id
-        and newer.season <> f.season
-        and newer.captured_at >= f.target_at
-        and newer.captured_at <= p_now
+      from public.sync_runs newer_run
+      where newer_run.season <> f.season
+        and newer_run.captured_at > f.forecast_at
+        and newer_run.captured_at <= p_now
     )
     and not exists (
       select 1
@@ -177,5 +178,7 @@ from (
 ) latest
 where row_number = 1;
 
+revoke all privileges on table public.clan_forecast_accuracy, public.clan_latest_forecasts
+  from public, anon, authenticated;
 grant select on public.clan_forecast_accuracy to anon, authenticated, service_role;
 grant select on public.clan_latest_forecasts to anon, authenticated, service_role;
