@@ -1,10 +1,11 @@
 :root {
+  --font-serif: "Shippori Mincho";
+  --font-sans: "IBM Plex Sans";
   --ink: #16213a; --ink-2: #1d2a48; --ivory: #e9e4d6; --slate: #6b7a99; --blue: #8fa3c9;
   --gold: #c9a24b; --moss: #6fa37a; --brick: #c4604f;
 }
 * { box-sizing: border-box; }
 body { margin: 0; overflow-x: hidden; background: var(--ink); color: var(--ivory); font: 400 16px/1.5 var(--font-sans), system-ui, sans-serif; padding-bottom: env(safe-area-inset-bottom, 0px); }
-main { max-width: 760px; margin: 0 auto; padding: 0 16px 56px; }
 h1, h2, .name, summary { font-family: var(--font-serif), serif; font-weight: 700; }
 h2 { font-size: 1.35rem; margin: 44px 0 12px; padding-bottom: 6px; border-bottom: 1px solid var(--ink-2); }
 .meta { color: var(--slate); margin: 0; }
@@ -103,4 +104,25 @@ summary:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
 @media (max-width: 560px) {
   .forecast-trend-chart { padding: 6px 4px 0; }
   .forecast-chart-label { font-size: 13px; }
+}
+
+
+/* Forecast alert action center */
+.forecast-alerts { margin: 0 0 18px; }
+.forecast-alert-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-bottom: 12px; }
+.forecast-alert-stat { min-width: 0; display: flex; flex-direction: column; gap: 3px; padding: 11px 12px; background: var(--ink-2); border: 1px solid rgba(143,163,201,.22); border-radius: 6px; }
+.forecast-alert-stat strong { color: var(--gold); font-size: 1.2rem; font-variant-numeric: tabular-nums; }
+.forecast-alert-stat span { color: var(--slate); font-size: .8rem; }
+.forecast-alert-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.forecast-alert-item { min-width: 0; padding: 12px; background: var(--ink-2); border: 1px solid rgba(143,163,201,.22); border-left: 3px solid var(--gold); border-radius: 6px; }
+.forecast-alert-item.severity-critical { border-left-color: var(--brick); }
+.forecast-alert-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.forecast-alert-heading strong { min-width: 0; overflow-wrap: anywhere; }
+.forecast-alert-severity { flex: none; padding: 1px 7px; border: 1px solid rgba(201,162,75,.5); border-radius: 999px; color: var(--gold); font-size: .7rem; font-weight: 700; text-transform: uppercase; }
+.forecast-alert-severity.severity-critical { border-color: rgba(196,96,79,.7); color: var(--brick); }
+.forecast-alert-item p { margin: 7px 0; font-size: .88rem; overflow-wrap: anywhere; }
+.forecast-alert-meta { display: flex; flex-wrap: wrap; gap: 4px 12px; color: var(--slate); font-size: .75rem; }
+@media (max-width: 560px) {
+  .forecast-alert-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .forecast-alert-stat:last-child { grid-column: 1 / -1; }
 }

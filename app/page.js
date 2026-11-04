@@ -5,6 +5,7 @@ import { isSyncStale } from '../lib/syncFreshness.js';
 import RepRatePopup from '../RepRatePopup';
 import ForecastAccuracy from '../ForecastAccuracy';
 import ForecastReliability from '../ForecastReliability';
+import ForecastAlerts from '../ForecastAlerts';
 
 export const revalidate = 300;
 const fmt = (n) => (n ?? 0).toLocaleString('en-US');
@@ -175,6 +176,22 @@ export default async function Page() {
     }
   }
 
+  let forecastAlerts = [];
+  let forecastAlertsAvailable = true;
+  if (season != null) {
+    const alertResult = await db.from('clan_forecast_alerts')
+      .select('id,season,clan_name,alert_type,severity,title,detail,predicted_reputation,actual_reputation,absolute_error,current_rank,projected_rank,delivery_status,created_at')
+      .eq('season', season)
+      .order('created_at', { ascending: false })
+      .limit(25);
+    if (alertResult.error) {
+      forecastAlertsAvailable = false;
+      console.error('Failed to load forecast alert history:', alertResult.error.message);
+    } else {
+      forecastAlerts = alertResult.data ?? [];
+    }
+  }
+
   const clanRow = (c) => (
     <Row key={c.name} rank={c.rank} name={c.name} sub={orDash(c.master)} mem={`${c.members}/${c.max_members}`} top={c.rank <= 3}
       rep={c.reputation} pct={(c.reputation / max) * 100} mine={c.name === mine} delta={<Delta c={c} />}
@@ -226,6 +243,9 @@ export default async function Page() {
           clans={forecastClanReliability}
           available={forecastReliabilityAvailable}
         />
+
+        <h2>Forecast alerts &amp; action center</h2>
+        <ForecastAlerts alerts={forecastAlerts} available={forecastAlertsAvailable} />
 
         <h2>Ranking</h2>
         <ol className="list">{contenders.map(clanRow)}</ol>

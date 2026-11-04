@@ -12,6 +12,7 @@ async function openHome(page) {
   expect(response?.status()).toBe(200);
   await expect(page.getByRole('heading', { name: '24-hour forecast accuracy' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Forecast trends & reliability' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Forecast alerts & action center' })).toBeVisible();
   return pageErrors;
 }
 
@@ -19,6 +20,7 @@ test('desktop dashboard renders the expected fixture state', async ({ page }) =>
   const pageErrors = await openHome(page);
   const accuracy = page.locator('section[aria-label="Forecast accuracy tracker"]');
   const reliability = page.locator('section[aria-label="Forecast trend and clan reliability"]');
+  const alertCenter = page.locator('section[aria-label="Forecast alerts action center"]');
 
   const desktopColumns = await accuracy.locator('.forecast-metrics').evaluate(
     (element) => getComputedStyle(element).gridTemplateColumns.split(/\s+/).length,
@@ -31,6 +33,8 @@ test('desktop dashboard renders the expected fixture state', async ({ page }) =>
     await expect(reliability).toContainText('Daily accuracy history will appear after forecasts have been scored on at least one day.');
     await expect(reliability).toContainText('No clan has five scored forecasts yet.');
     await expect(page.locator('.forecast-table-wrap')).toHaveCount(0);
+    await expect(alertCenter).toContainText('No forecast alerts have been recorded for this season.');
+    await expect(alertCenter.locator('.forecast-alert-item')).toHaveCount(0);
   } else {
     await expect(accuracy).toContainText('38.5 rep');
     await expect(accuracy).toContainText('81.8%');
@@ -43,6 +47,11 @@ test('desktop dashboard renders the expected fixture state', async ({ page }) =>
     await expect(leaderboard).toContainText('Beta');
     await expect(leaderboard).not.toContainText('Zero Wing');
     await expect(reliability).toContainText('1 clan(s) are still building the minimum five-forecast sample.');
+    await expect(alertCenter.locator('.forecast-alert-item')).toHaveCount(2);
+    await expect(alertCenter).toContainText('24-hour forecast miss');
+    await expect(alertCenter).toContainText('Projected top-10 entry');
+    await expect(alertCenter).toContainText('Discord not configured');
+    await expect(alertCenter).toContainText('Discord delivered');
     await expect(page.locator('.forecast-table-wrap')).toHaveCount(3);
   }
 
