@@ -133,6 +133,41 @@ const fixtures = {
       last_resolved_at: hoursAgo(8),
     },
   ],
+  clan_forecast_alerts: [
+    {
+      id: 1,
+      season: 4,
+      clan_name: "Alpha",
+      alert_type: "forecast_miss",
+      severity: "warning",
+      title: "24-hour forecast miss",
+      detail: "Alpha finished at 1,000,000 rep against a projection of 1,010,000 (10,000 rep error).",
+      predicted_reputation: 1010000,
+      actual_reputation: 1000000,
+      absolute_error: 10000,
+      current_rank: null,
+      projected_rank: null,
+      delivery_status: "not_configured",
+      created_at: hoursAgo(2),
+    },
+    {
+      id: 2,
+      season: 4,
+      clan_name: "Beta",
+      alert_type: "projected_top_ten_entry",
+      severity: "warning",
+      title: "Projected top-10 entry",
+      detail: "Beta is projected to move from #11 to #8 over the next 24 hours.",
+      predicted_reputation: 721000,
+      actual_reputation: null,
+      absolute_error: null,
+      current_rank: 11,
+      projected_rank: 8,
+      delivery_status: "sent",
+      created_at: hoursAgo(1),
+    },
+  ],
+
 };
 
 const server = createServer((request, response) => {

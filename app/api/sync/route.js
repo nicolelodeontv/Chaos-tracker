@@ -13,12 +13,13 @@ import {
   shouldStoreRawPayload,
 } from '../../../lib/sync-audit.mjs';
 import { buildClanForecast } from '../../../forecast.js';
+import { processForecastAlerts } from '../../../lib/forecast-alerts-server.mjs';
 
 export const dynamic = 'force-dynamic';
 
 const RAW_PAYLOAD_RETENTION_DAYS = 30;
 
-async function trackForecastAccuracy(db, season, insertedSnapshots) {
+async function trackForecastAccuracy(db, season, insertedSnapshots, currentClans) {
   try {
     const latestInsertedTime = Math.max(
       ...insertedSnapshots.map((snapshot) => new Date(snapshot.captured_at).getTime()).filter(Number.isFinite),
@@ -82,11 +83,14 @@ async function trackForecastAccuracy(db, season, insertedSnapshots) {
       if (insertError) throw insertError;
     }
 
+    const alertTracking = await processForecastAlerts(db, season, effectiveNow, currentClans);
+
     return {
       status: 'ok',
       created: forecasts.length,
       settled: Number(resolvedCount) || 0,
       without_enough_history: Math.max(0, insertedSnapshots.length - forecasts.length),
+      alerts: alertTracking,
     };
   } catch (error) {
     console.warn('Forecast accuracy tracking unavailable; normal clan sync will continue:', String(error?.message || error));
@@ -343,12 +347,18 @@ async function run(req) {
       max_members: clan.max_members,
       reputation: clan.reputation,
     }));
+    const currentClans = clans.filter((clan) => ids.has(clan.name)).map((clan) => ({
+      clan_id: ids.get(clan.name),
+      name: clan.name,
+      rank: clan.rank,
+      reputation: clan.reputation,
+    }));
 
     const { data: insertedSnapshots, error: e2 } = await db.from('clan_snapshots')
       .insert(snaps)
       .select('clan_id,captured_at,reputation,season');
     if (e2) throw e2;
-    const forecastTracking = await trackForecastAccuracy(db, season, insertedSnapshots || []);
+    const forecastTracking = await trackForecastAccuracy(db, season, insertedSnapshots || [], currentClans);
 
     if (wars.length) {
       const { error: e3 } = await db.from('war_results').upsert(wars, { onConflict: 'season,rank' });
