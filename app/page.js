@@ -3,6 +3,8 @@ import { lastIntervalRate, windowRate } from '../repRate.js';
 import Chart from './chart';
 import { isSyncStale } from '../lib/syncFreshness.js';
 import RepRatePopup from '../RepRatePopup';
+import ForecastAccuracy from '../ForecastAccuracy';
+import ForecastReliability from '../ForecastReliability';
 
 export const revalidate = 300;
 const fmt = (n) => (n ?? 0).toLocaleString('en-US');
@@ -21,13 +23,13 @@ function Row({ rank, name, sub, mem, rep, pct, mine, delta, war, top, rates }) {
     <li className={`row${mine ? ' mine' : ''}${war ? ' war' : ''}${top ? ' top' : ''}`}>
       <span className="bar" style={{ width: `${pct}%` }} />
       <span className="rank">{rank}</span>
-      <span className="who">
-        <span className="name-line">
+      <div className="who">
+        <div className="name-line">
           <span className="name">{name}</span>
           {!war && Number(rep) > 0 && <RepRatePopup clanName={name} rates={rates} />}
-        </span>
+        </div>
         <small>{sub}{mem ? `, ${mem}` : ''}</small>
-      </span>
+      </div>
       <span className="rep">{fmt(rep)}</span>
       {!war && <span className="delta">{delta}</span>}
     </li>
@@ -126,6 +128,53 @@ export default async function Page() {
     }
   }
 
+  let forecastMetrics = null;
+  let latestForecasts = [];
+  let forecastTrackingAvailable = true;
+  if (season != null) {
+    const [metricResult, forecastResult] = await Promise.all([
+      db.from('clan_forecast_accuracy').select('*').eq('season', season).maybeSingle(),
+      db.from('clan_latest_forecasts').select('*').eq('season', season).order('forecast_reputation', { ascending: false }),
+    ]);
+    if (metricResult.error || forecastResult.error) {
+      forecastTrackingAvailable = false;
+      console.error(
+        'Failed to load forecast tracking data:',
+        metricResult.error?.message || forecastResult.error?.message,
+      );
+    } else {
+      forecastMetrics = metricResult.data ?? null;
+      latestForecasts = forecastResult.data ?? [];
+    }
+  }
+
+  let forecastTrend = [];
+  let forecastClanReliability = [];
+  let forecastReliabilityAvailable = true;
+  if (season != null) {
+    const trendCutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const [trendResult, reliabilityResult] = await Promise.all([
+      db.from('clan_forecast_accuracy_trend')
+        .select('scored_day,resolved_count,mean_absolute_error,direction_accuracy_pct')
+        .eq('season', season)
+        .gte('scored_day', trendCutoff)
+        .order('scored_day', { ascending: true }),
+      db.from('clan_forecast_clan_reliability')
+        .select('clan_id,clan_name,resolved_count,pending_count,mean_absolute_error,direction_accuracy_pct,last_resolved_at')
+        .eq('season', season),
+    ]);
+    if (trendResult.error || reliabilityResult.error) {
+      forecastReliabilityAvailable = false;
+      console.error(
+        'Failed to load forecast trend and reliability data:',
+        trendResult.error?.message || reliabilityResult.error?.message,
+      );
+    } else {
+      forecastTrend = trendResult.data ?? [];
+      forecastClanReliability = reliabilityResult.data ?? [];
+    }
+  }
+
   const clanRow = (c) => (
     <Row key={c.name} rank={c.rank} name={c.name} sub={orDash(c.master)} mem={`${c.members}/${c.max_members}`} top={c.rank <= 3}
       rep={c.reputation} pct={(c.reputation / max) * 100} mine={c.name === mine} delta={<Delta c={c} />}
@@ -167,6 +216,16 @@ export default async function Page() {
 
         <h2>Reputation over time</h2>
         <Chart series={series} />
+
+        <h2>24-hour forecast accuracy</h2>
+        <ForecastAccuracy metrics={forecastMetrics} forecasts={latestForecasts} available={forecastTrackingAvailable} />
+
+        <h2>Forecast trends &amp; reliability</h2>
+        <ForecastReliability
+          trend={forecastTrend}
+          clans={forecastClanReliability}
+          available={forecastReliabilityAvailable}
+        />
 
         <h2>Ranking</h2>
         <ol className="list">{contenders.map(clanRow)}</ol>

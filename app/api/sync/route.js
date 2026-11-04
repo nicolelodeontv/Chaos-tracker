@@ -12,10 +12,87 @@ import {
   shouldAlertOnConsecutiveAuditDegradation,
   shouldStoreRawPayload,
 } from '../../../lib/sync-audit.mjs';
+import { buildClanForecast } from '../../../forecast.js';
 
 export const dynamic = 'force-dynamic';
 
 const RAW_PAYLOAD_RETENTION_DAYS = 30;
+
+async function trackForecastAccuracy(db, season, insertedSnapshots) {
+  try {
+    const latestInsertedTime = Math.max(
+      ...insertedSnapshots.map((snapshot) => new Date(snapshot.captured_at).getTime()).filter(Number.isFinite),
+    );
+    const effectiveNow = new Date(Math.max(
+      Date.now(),
+      Number.isFinite(latestInsertedTime) ? latestInsertedTime : 0,
+    )).toISOString();
+
+    const { data: resolvedCount, error: resolveError } = await db.rpc('resolve_due_clan_forecasts', {
+      p_now: effectiveNow,
+    });
+    if (resolveError) throw resolveError;
+
+    const cutoff = new Date(new Date(effectiveNow).getTime() - 24 * 60 * 60 * 1000).toISOString();
+    const historyByClan = new Map();
+    const pageSize = 1000;
+    let offset = 0;
+
+    while (true) {
+      const { data, error } = await db.from('clan_snapshots')
+        .select('id,clan_id,captured_at,reputation,season')
+        .eq('season', season)
+        .gte('captured_at', cutoff)
+        .lte('captured_at', effectiveNow)
+        .order('captured_at', { ascending: true })
+        .order('id', { ascending: true })
+        .range(offset, offset + pageSize - 1);
+      if (error) throw error;
+
+      const rows = data ?? [];
+      for (const snapshot of rows) {
+        if (!historyByClan.has(snapshot.clan_id)) historyByClan.set(snapshot.clan_id, []);
+        historyByClan.get(snapshot.clan_id).push(snapshot);
+      }
+      if (rows.length < pageSize) break;
+      offset += pageSize;
+    }
+
+    const forecasts = insertedSnapshots.map((snapshot) => {
+      const forecast = buildClanForecast(historyByClan.get(snapshot.clan_id) || []);
+      if (!forecast) return null;
+      return {
+        clan_id: snapshot.clan_id,
+        season,
+        forecast_at: forecast.forecastAt,
+        target_at: forecast.targetAt,
+        horizon_hours: forecast.horizonHours,
+        base_reputation: forecast.baseReputation,
+        forecast_reputation: forecast.forecastReputation,
+        rate_per_hour: forecast.ratePerHour,
+        history_hours: forecast.historyHours,
+      };
+    }).filter(Boolean);
+
+    if (forecasts.length) {
+      const { error: insertError } = await db.from('clan_forecasts').upsert(forecasts, {
+        onConflict: 'clan_id,season,forecast_at',
+        ignoreDuplicates: true,
+      });
+      if (insertError) throw insertError;
+    }
+
+    return {
+      status: 'ok',
+      created: forecasts.length,
+      settled: Number(resolvedCount) || 0,
+      without_enough_history: Math.max(0, insertedSnapshots.length - forecasts.length),
+    };
+  } catch (error) {
+    console.warn('Forecast accuracy tracking unavailable; normal clan sync will continue:', String(error?.message || error));
+    return { status: 'unavailable', created: 0, settled: 0 };
+  }
+}
 
 async function run(req) {
   // Preview shares public database variables with Production today. Block it
@@ -267,8 +344,11 @@ async function run(req) {
       reputation: clan.reputation,
     }));
 
-    const { error: e2 } = await db.from('clan_snapshots').insert(snaps);
+    const { data: insertedSnapshots, error: e2 } = await db.from('clan_snapshots')
+      .insert(snaps)
+      .select('clan_id,captured_at,reputation,season');
     if (e2) throw e2;
+    const forecastTracking = await trackForecastAccuracy(db, season, insertedSnapshots || []);
 
     if (wars.length) {
       const { error: e3 } = await db.from('war_results').upsert(wars, { onConflict: 'season,rank' });
@@ -314,6 +394,7 @@ async function run(req) {
       guard_status: guardStatus,
       decreases_detected: decreases.length,
       large_decrease_alerts: alerts,
+      forecast_tracking: forecastTracking,
     });
   } catch (error) {
     await recordFailure(error);

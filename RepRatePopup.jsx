@@ -90,7 +90,7 @@ export default function RepRatePopup({ clanName, rates }) {
   ];
 
   return (
-    <span ref={containerRef} className="rep-rate-wrap">
+    <div ref={containerRef} className="rep-rate-wrap">
       <button
         ref={triggerRef}
         type="button"
@@ -147,6 +147,6 @@ export default function RepRatePopup({ clanName, rates }) {
           The recent rate ignores intervals shorter than five minutes. Reputation gains arrive in bursts, so these are averages.
         </p>
       </div>
-    </span>
+    </div>
   );
 }
