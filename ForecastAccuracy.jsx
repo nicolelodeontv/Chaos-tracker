@@ -46,7 +46,7 @@ export default function ForecastAccuracy({ metrics, forecasts, available = true 
         {resolvedCount > 0
           ? `Season-to-date metrics include ${formatRep(pendingCount)} pending 24-hour forecast(s). Lower mean error is better.`
           : 'Accuracy results will appear after the first 24-hour forecasts reach their target time.'}
-        {' '}Predictions use the trailing same-season reputation trend. Outcomes use the first available same-season snapshot at or after the target, so the observed value may be slightly later than 24 hours.
+        {' '}Predictions use the trailing same-season reputation trend. Outcomes use the nearest same-season snapshot within one minute of the target, so the observed value can be slightly before or after 24 hours.
       </p>
 
       <h3 className="forecast-subtitle">Latest 24-hour projections</h3>

@@ -13,6 +13,8 @@ async function openHome(page) {
   await expect(page.getByRole('heading', { name: '24-hour forecast accuracy' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Forecast trends & reliability' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Forecast alerts & action center' })).toBeVisible();
+  await expect(page.locator('section[aria-label="Forecast accuracy tracker"]'))
+    .toContainText('nearest same-season snapshot within one minute of the target');
   return pageErrors;
 }
 
