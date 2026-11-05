@@ -25,7 +25,7 @@ test('desktop dashboard renders the expected fixture state', async ({ page }) =>
   const alertCenter = page.locator('section[aria-label="Forecast alerts action center"]');
 
   const desktopColumns = await accuracy.locator('.forecast-metrics').evaluate(
-    (element) => getComputedStyle(element).gridTemplateColumns.split(/\\s+/).length,
+    (element) => getComputedStyle(element).gridTemplateColumns.split(/\s+/).length,
   );
   expect(desktopColumns).toBe(3);
 
@@ -66,7 +66,7 @@ test('mobile dashboard fits the viewport and keeps tables scrollable', async ({ 
   const accuracy = page.locator('section[aria-label="Forecast accuracy tracker"]');
 
   const mobileColumns = await accuracy.locator('.forecast-metrics').evaluate(
-    (element) => getComputedStyle(element).gridTemplateColumns.split(/\\s+/).length,
+    (element) => getComputedStyle(element).gridTemplateColumns.split(/\s+/).length,
   );
   expect(mobileColumns).toBe(2);
 
