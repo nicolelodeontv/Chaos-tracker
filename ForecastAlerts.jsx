@@ -1,17 +1,4 @@
-function formatDate(value) {
-  if (!value) return "Time unavailable";
-  const date = new Date(value);
-  return Number.isNaN(date.getTime())
-    ? "Time unavailable"
-    : date.toLocaleString("en-US", {
-      month: "short",
-      day: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-      timeZone: "UTC",
-      timeZoneName: "short",
-    });
-}
+import LocalDate from "./LocalDate";
 
 function deliveryLabel(status) {
   if (status === "sent") return "Discord delivered";
@@ -33,9 +20,7 @@ export default function ForecastAlerts({ alerts, available = true }) {
 
   const rows = Array.isArray(alerts) ? alerts : [];
   const criticalCount = rows.filter((alert) => alert.severity === "critical").length;
-  const pendingDeliveryCount = rows.filter((alert) => (
-    alert.delivery_status === "queued" || alert.delivery_status === "failed"
-  )).length;
+  const notDeliveredCount = rows.filter((alert) => alert.delivery_status !== "sent").length;
 
   return (
     <section className="forecast-alerts" aria-label="Forecast alerts action center">
@@ -49,8 +34,8 @@ export default function ForecastAlerts({ alerts, available = true }) {
           <span>Critical alerts</span>
         </div>
         <div className="forecast-alert-stat">
-          <strong>{pendingDeliveryCount}</strong>
-          <span>Delivery attention</span>
+          <strong>{notDeliveredCount}</strong>
+          <span>Not delivered</span>
         </div>
       </div>
 
@@ -70,7 +55,7 @@ export default function ForecastAlerts({ alerts, available = true }) {
                 {alert.current_rank != null && alert.projected_rank != null && (
                   <span>#{alert.current_rank} → #{alert.projected_rank}</span>
                 )}
-                <span>{formatDate(alert.created_at)}</span>
+                <LocalDate value={alert.created_at} />
                 <span>{deliveryLabel(alert.delivery_status)}</span>
               </div>
             </li>

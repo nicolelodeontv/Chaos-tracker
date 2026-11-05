@@ -50,6 +50,21 @@ test('desktop dashboard renders the expected fixture state', async ({ page }) =>
     await expect(leaderboard).not.toContainText('Zero Wing');
     await expect(reliability).toContainText('1 clan(s) are still building the minimum five-forecast sample.');
     await expect(alertCenter.locator('.forecast-alert-item')).toHaveCount(2);
+    const notDeliveredStat = alertCenter.locator('.forecast-alert-stat').filter({ hasText: 'Not delivered' });
+    await expect(notDeliveredStat.locator('strong')).toHaveText('1');
+    const alertTime = alertCenter.locator('.forecast-alert-item time').first();
+    await expect(alertTime).not.toHaveText('Local time…');
+    const localTime = await alertTime.evaluate((element) => ({
+      displayed: element.textContent,
+      expected: new Date(element.dateTime).toLocaleString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+        timeZoneName: 'short',
+      }),
+    }));
+    expect(localTime.displayed).toBe(localTime.expected);
     await expect(alertCenter).toContainText('24-hour forecast miss');
     await expect(alertCenter).toContainText('Projected top-10 entry');
     await expect(alertCenter).toContainText('Discord not configured');
