@@ -68,6 +68,14 @@ async function trackForecastAccuracy(db, season, insertedSnapshots, currentClans
     // Learn a correction from the latest resolved outcomes for the same clan and season.
     // Stop reading once every clan in this sync has enough history for the rolling sample.
     const calibrationHistoryByClan = new Map();
+    const forecastCutoffByClan = new Map();
+    for (const snapshot of insertedSnapshots) {
+      const forecastTime = new Date(snapshot.captured_at).getTime();
+      const currentCutoff = forecastCutoffByClan.get(snapshot.clan_id);
+      if (Number.isFinite(forecastTime) && (!Number.isFinite(currentCutoff) || forecastTime < currentCutoff)) {
+        forecastCutoffByClan.set(snapshot.clan_id, forecastTime);
+      }
+    }
     const calibrationClanIds = [...new Set(insertedSnapshots.map((snapshot) => snapshot.clan_id))];
     const calibrationHistoryCount = new Map(calibrationClanIds.map((clanId) => [clanId, 0]));
     let calibrationHistoryAvailable = true;
@@ -77,7 +85,7 @@ async function trackForecastAccuracy(db, season, insertedSnapshots, currentClans
       try {
         while ([...calibrationHistoryCount.values()].some((count) => count < MAX_FORECAST_CALIBRATION_SAMPLES)) {
           const { data, error } = await db.from('clan_forecasts')
-            .select('id,clan_id,season,forecast_at,forecast_reputation,actual_reputation,resolution_status')
+            .select('id,clan_id,season,forecast_at,forecast_reputation,actual_reputation,resolution_status,resolved_at')
             .eq('season', season)
             .eq('resolution_status', 'resolved')
             .in('clan_id', calibrationClanIds)
@@ -88,6 +96,17 @@ async function trackForecastAccuracy(db, season, insertedSnapshots, currentClans
 
           const rows = data ?? [];
           for (const row of rows) {
+            const cutoff = forecastCutoffByClan.get(row.clan_id);
+            const priorForecastAt = new Date(row.forecast_at).getTime();
+            const priorResolvedAt = new Date(row.resolved_at).getTime();
+            if (
+              !Number.isFinite(cutoff)
+              || !Number.isFinite(priorForecastAt)
+              || priorForecastAt >= cutoff
+              || !Number.isFinite(priorResolvedAt)
+              || priorResolvedAt > cutoff
+            ) continue;
+
             const currentCount = calibrationHistoryCount.get(row.clan_id) ?? 0;
             if (currentCount >= MAX_FORECAST_CALIBRATION_SAMPLES) continue;
             if (!calibrationHistoryByClan.has(row.clan_id)) calibrationHistoryByClan.set(row.clan_id, []);
@@ -132,6 +151,10 @@ async function trackForecastAccuracy(db, season, insertedSnapshots, currentClans
           forecast_reputation: forecast.forecastReputation,
           rate_per_hour: forecast.ratePerHour,
           history_hours: forecast.historyHours,
+          calibration_status: forecast.calibration?.status ?? 'not_calibrated',
+          calibration_sample_count: forecast.calibration?.sampleCount ?? 0,
+          calibration_median_relative_error_pct: forecast.calibration?.medianRelativeErrorPct ?? null,
+          calibration_adjustment_pct: forecast.calibration?.appliedAdjustmentPct ?? null,
         },
       };
     }).filter(Boolean);
