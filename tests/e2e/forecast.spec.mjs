@@ -13,6 +13,8 @@ async function openHome(page) {
   await expect(page.getByRole('heading', { name: '24-hour forecast accuracy' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Forecast trends & reliability' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Forecast alerts & action center' })).toBeVisible();
+  await expect(page.locator('section[aria-label="Forecast accuracy tracker"]'))
+    .toContainText('nearest same-season snapshot within one minute of the target');
   return pageErrors;
 }
 
@@ -23,7 +25,7 @@ test('desktop dashboard renders the expected fixture state', async ({ page }) =>
   const alertCenter = page.locator('section[aria-label="Forecast alerts action center"]');
 
   const desktopColumns = await accuracy.locator('.forecast-metrics').evaluate(
-    (element) => getComputedStyle(element).gridTemplateColumns.split(/\s+/).length,
+    (element) => getComputedStyle(element).gridTemplateColumns.split(/\\s+/).length,
   );
   expect(desktopColumns).toBe(3);
 
@@ -64,7 +66,7 @@ test('mobile dashboard fits the viewport and keeps tables scrollable', async ({ 
   const accuracy = page.locator('section[aria-label="Forecast accuracy tracker"]');
 
   const mobileColumns = await accuracy.locator('.forecast-metrics').evaluate(
-    (element) => getComputedStyle(element).gridTemplateColumns.split(/\s+/).length,
+    (element) => getComputedStyle(element).gridTemplateColumns.split(/\\s+/).length,
   );
   expect(mobileColumns).toBe(2);
 
