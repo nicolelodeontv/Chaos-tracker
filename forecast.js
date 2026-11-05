@@ -100,10 +100,13 @@ export function applyClanForecastCalibration(forecast, historicalForecasts, opti
     .filter((row) => {
       const predicted = Number(row.forecast_reputation);
       const actual = Number(row.actual_reputation);
+      const resolvedTime = toMs(row.resolved_at);
       return row.resolution_status === 'resolved'
         && row._time != null
+        && resolvedTime != null
         && forecastTime != null
         && row._time < forecastTime
+        && resolvedTime <= forecastTime
         && (season == null || String(row.season) === season)
         && Number.isFinite(predicted)
         && predicted > 0

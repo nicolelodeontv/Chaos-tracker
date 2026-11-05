@@ -12,12 +12,13 @@ const snapshot = (captured_at, reputation, season = 4) => ({
   season,
 });
 
-const resolvedForecast = (day, actual, predicted = 1000, season = 4) => ({
+const resolvedForecast = (day, actual, predicted = 1000, season = 4, resolved_at = `2026-11-${day}T01:00:00.000Z`) => ({
   season,
   forecast_at: `2026-11-${day}T00:00:00.000Z`,
   forecast_reputation: predicted,
   actual_reputation: actual,
   resolution_status: 'resolved',
+  resolved_at,
 });
 
 test('projects 24 hours from the measured same-season average', () => {
@@ -87,6 +88,28 @@ test('leaves forecasts unadjusted until five earlier same-season outcomes exist'
   assert.equal(calibrated.forecastReputation, 1200);
   assert.equal(calibrated.calibration.status, 'insufficient_data');
   assert.equal(calibrated.calibration.sampleCount, 4);
+});
+
+test('excludes outcomes that resolved after the new forecast timestamp', () => {
+  const forecast = {
+    season: 4,
+    forecastAt: '2026-11-06T00:00:00.000Z',
+    horizonHours: 24,
+    baseReputation: 1000,
+    forecastReputation: 1200,
+    ratePerHour: 8.333333,
+  };
+  const history = [
+    resolvedForecast('01', 1100),
+    resolvedForecast('02', 1100),
+    resolvedForecast('03', 1100),
+    resolvedForecast('04', 1100),
+    resolvedForecast('05', 2000, 1000, 4, '2026-11-06T00:00:01.000Z'),
+  ];
+  const calibrated = applyClanForecastCalibration(forecast, history);
+  assert.equal(calibrated.calibration.status, 'insufficient_data');
+  assert.equal(calibrated.calibration.sampleCount, 4);
+  assert.equal(calibrated.forecastReputation, 1200);
 });
 
 test('uses the median prior relative error and a conservative capped correction', () => {
