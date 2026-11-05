@@ -12,7 +12,13 @@ import {
   shouldAlertOnConsecutiveAuditDegradation,
   shouldStoreRawPayload,
 } from '../../../lib/sync-audit.mjs';
-import { buildClanForecast } from '../../../forecast.js';
+import {
+  applyClanForecastCalibration,
+  buildClanForecast,
+  MAX_FORECAST_CALIBRATION_ADJUSTMENT_PCT,
+  MAX_FORECAST_CALIBRATION_SAMPLES,
+  MIN_FORECAST_CALIBRATION_SAMPLES,
+} from '../../../forecast.js';
 import { processForecastAlerts } from '../../../lib/forecast-alerts-server.mjs';
 
 export const dynamic = 'force-dynamic';
@@ -59,21 +65,83 @@ async function trackForecastAccuracy(db, season, insertedSnapshots, currentClans
       offset += pageSize;
     }
 
-    const forecasts = insertedSnapshots.map((snapshot) => {
-      const forecast = buildClanForecast(historyByClan.get(snapshot.clan_id) || []);
-      if (!forecast) return null;
+    // Learn a correction from the latest resolved outcomes for the same clan and season.
+    // Stop reading once every clan in this sync has enough history for the rolling sample.
+    const calibrationHistoryByClan = new Map();
+    const calibrationClanIds = [...new Set(insertedSnapshots.map((snapshot) => snapshot.clan_id))];
+    const calibrationHistoryCount = new Map(calibrationClanIds.map((clanId) => [clanId, 0]));
+    let calibrationHistoryAvailable = true;
+    if (calibrationClanIds.length) {
+      const pageSize = 1000;
+      let offset = 0;
+      try {
+        while ([...calibrationHistoryCount.values()].some((count) => count < MAX_FORECAST_CALIBRATION_SAMPLES)) {
+          const { data, error } = await db.from('clan_forecasts')
+            .select('id,clan_id,season,forecast_at,forecast_reputation,actual_reputation,resolution_status')
+            .eq('season', season)
+            .eq('resolution_status', 'resolved')
+            .in('clan_id', calibrationClanIds)
+            .order('forecast_at', { ascending: false })
+            .order('id', { ascending: false })
+            .range(offset, offset + pageSize - 1);
+          if (error) throw error;
+
+          const rows = data ?? [];
+          for (const row of rows) {
+            const currentCount = calibrationHistoryCount.get(row.clan_id) ?? 0;
+            if (currentCount >= MAX_FORECAST_CALIBRATION_SAMPLES) continue;
+            if (!calibrationHistoryByClan.has(row.clan_id)) calibrationHistoryByClan.set(row.clan_id, []);
+            calibrationHistoryByClan.get(row.clan_id).push(row);
+            calibrationHistoryCount.set(row.clan_id, currentCount + 1);
+          }
+          if (rows.length < pageSize) break;
+          offset += pageSize;
+        }
+      } catch (error) {
+        calibrationHistoryAvailable = false;
+        calibrationHistoryByClan.clear();
+        console.warn(
+          'Forecast calibration history unavailable; preserving baseline projections:',
+          String(error?.message || error),
+        );
+      }
+    }
+
+    const forecastResults = insertedSnapshots.map((snapshot) => {
+      const baseline = buildClanForecast(historyByClan.get(snapshot.clan_id) || []);
+      if (!baseline) return null;
+      const forecast = calibrationHistoryAvailable
+        ? applyClanForecastCalibration(baseline, calibrationHistoryByClan.get(snapshot.clan_id) || [])
+        : {
+          ...baseline,
+          calibration: {
+            status: 'history_unavailable',
+            sampleCount: 0,
+            requiredSamples: MIN_FORECAST_CALIBRATION_SAMPLES,
+          },
+        };
       return {
-        clan_id: snapshot.clan_id,
-        season,
-        forecast_at: forecast.forecastAt,
-        target_at: forecast.targetAt,
-        horizon_hours: forecast.horizonHours,
-        base_reputation: forecast.baseReputation,
-        forecast_reputation: forecast.forecastReputation,
-        rate_per_hour: forecast.ratePerHour,
-        history_hours: forecast.historyHours,
+        forecast,
+        row: {
+          clan_id: snapshot.clan_id,
+          season,
+          forecast_at: forecast.forecastAt,
+          target_at: forecast.targetAt,
+          horizon_hours: forecast.horizonHours,
+          base_reputation: forecast.baseReputation,
+          forecast_reputation: forecast.forecastReputation,
+          rate_per_hour: forecast.ratePerHour,
+          history_hours: forecast.historyHours,
+        },
       };
     }).filter(Boolean);
+    const forecasts = forecastResults.map((result) => result.row);
+    const calibratedForecasts = forecastResults.filter(
+      (result) => result.forecast.calibration?.status === 'calibrated',
+    ).length;
+    const calibrationSamplesBuilding = forecastResults.filter(
+      (result) => result.forecast.calibration?.status === 'insufficient_data',
+    ).length;
 
     if (forecasts.length) {
       const { error: insertError } = await db.from('clan_forecasts').upsert(forecasts, {
@@ -90,6 +158,13 @@ async function trackForecastAccuracy(db, season, insertedSnapshots, currentClans
       created: forecasts.length,
       settled: Number(resolvedCount) || 0,
       without_enough_history: Math.max(0, insertedSnapshots.length - forecasts.length),
+      calibration: {
+        history_available: calibrationHistoryAvailable,
+        eligible_forecasts: calibratedForecasts,
+        waiting_for_samples: calibrationSamplesBuilding,
+        required_samples: MIN_FORECAST_CALIBRATION_SAMPLES,
+        max_adjustment_pct: MAX_FORECAST_CALIBRATION_ADJUSTMENT_PCT,
+      },
       alerts: alertTracking,
     };
   } catch (error) {

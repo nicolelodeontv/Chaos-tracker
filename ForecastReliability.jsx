@@ -87,6 +87,8 @@ export default function ForecastReliability({ trend, clans, available = true }) 
       || Number(b.direction_accuracy_pct) - Number(a.direction_accuracy_pct)
     ));
   const buildingSample = clanRows.filter((row) => Number(row.resolved_count) < 5);
+  const calibrationEligibleCount = clanRows.filter((row) => Number(row.resolved_count) >= 5).length;
+  const calibrationClanCount = clanRows.length;
 
   return (
     <section className="forecast-reliability" aria-label="Forecast trend and clan reliability">
@@ -120,6 +122,13 @@ export default function ForecastReliability({ trend, clans, available = true }) 
       ) : (
         <p className="forecast-note">Daily accuracy history will appear after forecasts have been scored on at least one day.</p>
       )}
+
+      <h3 className="forecast-subtitle">Per-clan adaptive calibration</h3>
+      <p className="forecast-note">
+        {formatCount(calibrationEligibleCount)} of {formatCount(calibrationClanCount)} clans currently qualify for calibration.
+        A clan needs at least five earlier resolved forecasts; calibration uses the median relative error from up to ten same-season outcomes,
+        with a conservative sample weight and a maximum adjustment of 5%. Clans below the threshold keep the baseline projection.
+      </p>
 
       <h3 className="forecast-subtitle">Clan reliability leaderboard</h3>
       <p className="forecast-note">
