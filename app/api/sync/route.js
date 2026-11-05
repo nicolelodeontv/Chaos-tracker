@@ -12,7 +12,13 @@ import {
   shouldAlertOnConsecutiveAuditDegradation,
   shouldStoreRawPayload,
 } from '../../../lib/sync-audit.mjs';
-import {\n  applyClanForecastCalibration,\n  buildClanForecast,\n  MAX_FORECAST_CALIBRATION_ADJUSTMENT_PCT,\n  MAX_FORECAST_CALIBRATION_SAMPLES,\n  MIN_FORECAST_CALIBRATION_SAMPLES,\n} from '../../../forecast.js';
+import {
+  applyClanForecastCalibration,
+  buildClanForecast,
+  MAX_FORECAST_CALIBRATION_ADJUSTMENT_PCT,
+  MAX_FORECAST_CALIBRATION_SAMPLES,
+  MIN_FORECAST_CALIBRATION_SAMPLES,
+} from '../../../forecast.js';
 import { processForecastAlerts } from '../../../lib/forecast-alerts-server.mjs';
 
 export const dynamic = 'force-dynamic';
@@ -108,7 +114,11 @@ async function trackForecastAccuracy(db, season, insertedSnapshots, currentClans
         ? applyClanForecastCalibration(baseline, calibrationHistoryByClan.get(snapshot.clan_id) || [])
         : {
           ...baseline,
-          calibration: {\n            status: 'history_unavailable',\n            sampleCount: 0,\n            requiredSamples: MIN_FORECAST_CALIBRATION_SAMPLES,\n          },
+          calibration: {
+            status: 'history_unavailable',
+            sampleCount: 0,
+            requiredSamples: MIN_FORECAST_CALIBRATION_SAMPLES,
+          },
         };
       return {
         forecast,
