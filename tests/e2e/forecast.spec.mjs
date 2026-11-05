@@ -49,6 +49,8 @@ test('desktop dashboard renders the expected fixture state', async ({ page }) =>
     await expect(leaderboard).toContainText('Beta');
     await expect(leaderboard).not.toContainText('Zero Wing');
     await expect(reliability).toContainText('1 clan(s) are still building the minimum five-forecast sample.');
+    await expect(reliability).toContainText('2 of 3 clans currently qualify for calibration.');
+    await expect(reliability).toContainText('median relative error from up to ten same-season outcomes');
     await expect(alertCenter.locator('.forecast-alert-item')).toHaveCount(2);
     const notDeliveredStat = alertCenter.locator('.forecast-alert-stat').filter({ hasText: 'Not delivered' });
     await expect(notDeliveredStat.locator('strong')).toHaveText('1');
